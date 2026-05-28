@@ -54,6 +54,13 @@ export async function updateSessionModel(id: string, modelId: string): Promise<v
   });
 }
 
+export async function updateSessionTitle(id: string, title: string): Promise<void> {
+  await request(`/sessions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+}
+
 // ============ Config API ============
 
 export async function fetchConfig(): Promise<AppConfig> {

@@ -14,6 +14,7 @@ export function useSession() {
     selectSession,
     deleteSession,
     deleteSessions,
+    renameSession,
   } = useAppStore();
 
   useEffect(() => {
@@ -50,6 +51,13 @@ export function useSession() {
     [deleteSessions]
   );
 
+  const rename = useCallback(
+    async (id: string, newTitle: string) => {
+      await renameSession(id, newTitle);
+    },
+    [renameSession]
+  );
+
   return {
     sessions,
     currentSession,
@@ -59,5 +67,6 @@ export function useSession() {
     select,
     remove,
     removeBatch,
+    rename,
   };
 }

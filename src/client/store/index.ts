@@ -34,6 +34,7 @@ interface AppState {
   selectSession: (id: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   deleteSessions: (ids: string[]) => Promise<void>;
+  renameSession: (id: string, title: string) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   abortChat: () => void;
 
@@ -159,6 +160,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       await api.deleteSessions(ids);
     } catch (err: any) {
       console.error("批量删除失败:", err.message);
+      get().loadSessions();
+    }
+  },
+
+  renameSession: async (id: string, title: string) => {
+    // 乐观更新
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === id ? { ...s, title } : s)),
+    }));
+    try {
+      await api.updateSessionTitle(id, title);
+    } catch (err: any) {
+      console.error("重命名失败:", err.message);
       get().loadSessions();
     }
   },

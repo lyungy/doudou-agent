@@ -6,7 +6,7 @@ import { useSession } from "../../hooks/useSession";
 import { SessionItem } from "./SessionItem";
 
 export function SessionList() {
-  const { sessions, currentSessionId, create, select, remove, removeBatch, loadingSessions } = useSession();
+  const { sessions, currentSessionId, create, select, remove, removeBatch, rename, loadingSessions } = useSession();
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -115,6 +115,7 @@ export function SessionList() {
               selected={selectedIds.has(session.id)}
               onSelect={() => (selectMode ? toggleSelect(session.id) : select(session.id))}
               onDelete={() => remove(session.id)}
+              onRename={(title) => rename(session.id, title)}
             />
           ))
         )}

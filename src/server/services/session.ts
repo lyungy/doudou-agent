@@ -118,9 +118,12 @@ export async function createSession(title?: string, modelId?: string): Promise<S
   const metadata = await session.getMetadata();
   const now = new Date().toISOString();
 
+  // 自动生成短标识作为默认标题（取 UUID 末 6 位，随机性更高）
+  const shortId = metadata.id.replace(/-/g, "").slice(-6);
+
   const meta: SessionMeta = {
     id: metadata.id,
-    title: title || "新对话",
+    title: title || `对话-${shortId}`,
     modelId: modelId || "",
     cwd: metadata.cwd,
     jsonlPath: metadata.path,

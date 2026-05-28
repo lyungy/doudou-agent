@@ -1,6 +1,7 @@
 /**
- * Session 列表项组件
+ * Session 列表项组件（支持重命名）
  */
+import { useState, useRef, useEffect } from "react";
 import type { SessionMeta } from "../../types";
 
 interface Props {
@@ -10,9 +11,50 @@ interface Props {
   selected?: boolean;
   onSelect: () => void;
   onDelete: () => void;
+  onRename: (newTitle: string) => void;
 }
 
-export function SessionItem({ session, isActive, selectable, selected, onSelect, onDelete }: Props) {
+export function SessionItem({ session, isActive, selectable, selected, onSelect, onDelete, onRename }: Props) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // 进入编辑模式时聚焦
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const startEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditValue(session.title);
+    setEditing(true);
+  };
+
+  const confirmEdit = () => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== session.title) {
+      onRename(trimmed);
+    }
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setEditing(false);
+    setEditValue("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      confirmEdit();
+    } else if (e.key === "Escape") {
+      cancelEdit();
+    }
+  };
+
   return (
     <div
       className={`group flex items-center gap-2.5 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-150 ${
@@ -36,8 +78,22 @@ export function SessionItem({ session, isActive, selectable, selected, onSelect,
       {/* 会话图标 */}
       <span className="text-sm shrink-0 opacity-60">💬</span>
 
-      {/* 标题 */}
-      <span className="text-sm truncate flex-1">{session.title}</span>
+      {/* 标题：显示模式 vs 编辑模式 */}
+      {editing ? (
+        <input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={confirmEdit}
+          onKeyDown={handleKeyDown}
+          onClick={(e) => e.stopPropagation()}
+          className={`flex-1 text-sm bg-transparent border-b ${
+            isActive ? "border-neutral-600 text-white" : "border-neutral-600 text-neutral-200"
+          } outline-none px-0.5 py-0.5`}
+        />
+      ) : (
+        <span className="text-sm truncate flex-1">{session.title}</span>
+      )}
 
       {/* 消息数 badge */}
       {session.messageCount > 0 && (
@@ -48,18 +104,27 @@ export function SessionItem({ session, isActive, selectable, selected, onSelect,
         </span>
       )}
 
-      {/* 删除按钮 */}
-      {!selectable && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            if (confirm("确定删除这个对话？")) onDelete();
-          }}
-          className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 transition-all text-xs shrink-0"
-          title="删除"
-        >
-          🗑️
-        </button>
+      {/* 操作按钮（非选择模式 + 非编辑模式） */}
+      {!selectable && !editing && (
+        <>
+          <button
+            onClick={startEdit}
+            className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-blue-400 transition-all text-xs shrink-0"
+            title="重命名"
+          >
+            ✏️
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (confirm("确定删除这个对话？")) onDelete();
+            }}
+            className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 transition-all text-xs shrink-0"
+            title="删除"
+          >
+            🗑️
+          </button>
+        </>
       )}
     </div>
   );
