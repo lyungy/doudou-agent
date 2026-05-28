@@ -1,7 +1,7 @@
 /**
  * API 请求封装
  */
-import type { SessionMeta, AppConfig, ChatMessage, ModelDef } from "../types";
+import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord } from "../types";
 
 const BASE = "/api";
 
@@ -91,6 +91,7 @@ export interface ChatStreamCallbacks {
   onToolEnd: (toolCall: any) => void;
   onToolExecStart: (data: { toolCallId: string; toolName: string; args: any }) => void;
   onToolExecEnd: (data: { toolCallId: string; toolName: string; result: any; isError: boolean }) => void;
+  onLLMStatus: (data: { status: string; requestId: string; ttft?: number; duration?: number; inputTokens?: number; outputTokens?: number; error?: string }) => void;
   onDone: () => void;
   onError: (error: string) => void;
 }
@@ -182,5 +183,36 @@ function handleSSEEvent(type: string, data: any, callbacks: ChatStreamCallbacks)
     case "error":
       callbacks.onError(data.error);
       break;
+    case "llm_status":
+      callbacks.onLLMStatus(data);
+      break;
   }
+}
+
+// ============ Logs API ============
+
+export interface LogFilter {
+  level?: string;
+  module?: string;
+  since?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchLogs(filter: LogFilter = {}): Promise<{ entries: LogEntry[]; total: number }> {
+  const params = new URLSearchParams();
+  if (filter.level) params.set("level", filter.level);
+  if (filter.module) params.set("module", filter.module);
+  if (filter.since) params.set("since", filter.since);
+  if (filter.limit) params.set("limit", String(filter.limit));
+  if (filter.offset) params.set("offset", String(filter.offset));
+  const qs = params.toString();
+  return request(`/logs${qs ? `?${qs}` : ""}`);
+}
+
+export async function fetchLLMRequests(sessionId?: string, limit = 50): Promise<{ requests: LLMRequestRecord[] }> {
+  const params = new URLSearchParams();
+  if (sessionId) params.set("sessionId", sessionId);
+  params.set("limit", String(limit));
+  return request(`/logs/llm-requests?${params.toString()}`);
 }

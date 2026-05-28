@@ -40,6 +40,7 @@ router.put("/", (req, res) => {
       llm: { ...current.llm, ...updates.llm },
       storage: { ...current.storage, ...updates.storage },
       server: { ...current.server, ...updates.server },
+      logging: { ...current.logging, ...(updates as any).logging },
     };
 
     // 如果 api_key 是掩码，保留原值

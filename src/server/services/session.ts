@@ -8,6 +8,7 @@ import Database from "better-sqlite3";
 import { JsonlSessionRepo } from "@earendil-works/pi-agent-core";
 import type { Session } from "@earendil-works/pi-agent-core";
 import { getConfig } from "./config.js";
+import { getLogger } from "./logger.js";
 import { NodeFileSystem } from "./node-fs.js";
 
 /** Session 元数据（SQLite 存储） */
@@ -47,7 +48,7 @@ export function initStorage(): void {
   DATA_DIR = resolveDataDir();
   SESSIONS_DIR = resolve(DATA_DIR, "sessions");
   DB_PATH = resolve(DATA_DIR, "doudou.db");
-  console.log(`[Storage] 数据目录: ${DATA_DIR}`);
+  getLogger().info("system", `数据目录: ${DATA_DIR}`);
 
   // 确保目录存在
   mkdirSync(SESSIONS_DIR, { recursive: true });

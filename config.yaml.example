@@ -32,3 +32,9 @@ storage:
 
 server:
   port: 3000
+
+# 日志配置
+logging:
+  level: info              # debug | info | warn | error
+  dir: ./logs              # 日志文件目录
+  max_days: 7              # 保留天数，超过自动清理

@@ -2,7 +2,7 @@
  * Zustand 全局状态管理
  */
 import { create } from "zustand";
-import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef } from "../types";
+import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData } from "../types";
 import * as api from "../lib/client";
 
 interface AppState {
@@ -25,6 +25,16 @@ interface AppState {
   currentText: string;
   currentThinking: string;
   currentToolCalls: ToolCallInfo[];
+
+  // LLM 实时状态
+  llmStatus: LLMRequestStatus | null;
+  llmRequestId: string | null;
+  llmTtft: number | null;
+  llmDuration: number | null;
+  llmInputTokens: number | null;
+  llmOutputTokens: number | null;
+  llmError: string | null;
+  setLLMStatus: (data: LLMStatusData | null) => void;
 
   // 操作
   loadModels: () => Promise<void>;
@@ -64,6 +74,31 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentText: "",
   currentThinking: "",
   currentToolCalls: [],
+
+  // LLM 状态
+  llmStatus: null,
+  llmRequestId: null,
+  llmTtft: null,
+  llmDuration: null,
+  llmInputTokens: null,
+  llmOutputTokens: null,
+  llmError: null,
+
+  setLLMStatus: (data) => {
+    if (!data) {
+      set({ llmStatus: null, llmRequestId: null, llmTtft: null, llmDuration: null, llmInputTokens: null, llmOutputTokens: null, llmError: null });
+      return;
+    }
+    set({
+      llmStatus: data.status as LLMRequestStatus,
+      llmRequestId: data.requestId,
+      llmTtft: data.ttft ?? null,
+      llmDuration: data.duration ?? null,
+      llmInputTokens: data.inputTokens ?? null,
+      llmOutputTokens: data.outputTokens ?? null,
+      llmError: data.error ?? null,
+    });
+  },
 
   // ============ 模型 ============
 
@@ -211,6 +246,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentText: "",
       currentThinking: "",
       currentToolCalls: [],
+      llmStatus: "connecting" as LLMRequestStatus,
+      llmRequestId: null,
+      llmTtft: null,
+      llmDuration: null,
+      llmInputTokens: null,
+      llmOutputTokens: null,
+      llmError: null,
     }));
 
     abortController = new AbortController();
@@ -230,9 +272,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         onToolExecEnd: (data) => {
           get()._updateToolCall(data.toolCallId, { result: data.result, status: data.isError ? "error" : "done", isError: data.isError });
         },
+        onLLMStatus: (data) => {
+          get().setLLMStatus({
+            status: data.status as LLMRequestStatus,
+            requestId: data.requestId,
+            ttft: data.ttft,
+            duration: data.duration,
+            inputTokens: data.inputTokens,
+            outputTokens: data.outputTokens,
+            error: data.error,
+          });
+        },
         onDone: () => {
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });
+          // LLM 状态保留展示，下次发消息时清空
         },
         onError: () => {
           get()._commitAssistantMessage();
@@ -316,7 +370,7 @@ function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         id: `user-${messages.length}`,
         type: "user",
         content,
-        timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
+        timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
       });
     } else if (msg.role === "assistant") {
       const textParts =
@@ -347,7 +401,7 @@ function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         content: textParts,
         thinking: thinkingParts || undefined,
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
-        timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
+        timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
       });
     }
   }

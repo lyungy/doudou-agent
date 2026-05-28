@@ -8,6 +8,7 @@ import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import { getConfig } from "./config.js";
+import { getLogger } from "./logger.js";
 import { tools } from "../tools/index.js";
 
 /** 默认系统提示词 */
@@ -19,7 +20,7 @@ function loadSystemPrompt(): string {
   if (existsSync(agentMd)) {
     const content = readFileSync(agentMd, "utf-8").trim();
     if (content) {
-      console.log("[Agent] 已加载 AGENT.md 作为系统提示词");
+      getLogger().info("agent", "已加载 AGENT.md 作为系统提示词");
       return content;
     }
   }

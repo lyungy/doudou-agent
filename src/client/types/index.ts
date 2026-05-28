@@ -63,6 +63,51 @@ export interface ToolCallInfo {
   isError?: boolean;
 }
 
+/** 日志级别 */
+export type LogLevel = "debug" | "info" | "warn" | "error";
+
+/** 日志模块 */
+export type LogModule = "http" | "llm" | "agent" | "sse" | "system";
+
+/** 日志条目 */
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  module: LogModule | string;
+  message: string;
+  meta?: Record<string, any>;
+}
+
+/** LLM 请求状态 */
+export type LLMRequestStatus = "connecting" | "streaming" | "completed" | "error" | "aborted";
+
+/** LLM 请求记录 */
+export interface LLMRequestRecord {
+  id: string;
+  sessionId: string;
+  modelId: string;
+  status: LLMRequestStatus;
+  startTime: number;
+  firstTokenTime?: number;
+  endTime?: number;
+  duration?: number;
+  ttft?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  error?: string;
+}
+
+/** LLM 实时状态数据 */
+export interface LLMStatusData {
+  status: LLMRequestStatus;
+  requestId: string;
+  ttft?: number;
+  duration?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  error?: string;
+}
+
 /** SSE 事件类型 */
 export type SSEEventType =
   | "text_delta"

@@ -1,5 +1,6 @@
 /**
  * 对话路由：SSE 流式对话接口
+ * 集成 LLM 请求追踪 + SSE 连接生命周期日志
  */
 import { Router } from "express";
 import type { Request, Response } from "express";
@@ -7,6 +8,8 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModelById } from "../services/config.js";
 import { getSession, updateSession, openSession } from "../services/session.js";
 import { getOrCreateAgent, abortAgent } from "../services/agent.js";
+import { getLLMTracker } from "../services/llm-tracker.js";
+import { getLogger } from "../services/logger.js";
 
 const router = Router();
 
@@ -15,6 +18,9 @@ const router = Router();
  */
 router.post("/stream", async (req: Request, res: Response) => {
   const { sessionId, message, modelId } = req.body;
+  const logger = getLogger();
+  const tracker = getLLMTracker();
+
   if (!sessionId || !message) {
     return res.status(400).json({ error: "缺少 sessionId 或 message" });
   }
@@ -42,7 +48,7 @@ router.post("/stream", async (req: Request, res: Response) => {
       await session.appendMessage(msg);
       persistCount++;
     } catch (err: any) {
-      console.error("[Chat] persist 失败:", err.message);
+      logger.error("sse", "消息持久化失败", { sessionId, error: err.message });
     }
   };
 
@@ -56,14 +62,38 @@ router.post("/stream", async (req: Request, res: Response) => {
   // 心跳
   const heartbeat = setInterval(() => sendEvent("heartbeat", {}), 15000);
 
+  // SSE 连接生命周期日志
+  const connectionStart = Date.now();
+  let eventCount = 0;
+  let connectionClosed = false;
+
+  logger.info("sse", "SSE 连接建立", { sessionId, modelId: modelId || sessionMeta.modelId });
+
+  // LLM 追踪
+  const effectiveModelId = modelId || sessionMeta.modelId || "";
+  const requestId = tracker.startRequest(sessionId, effectiveModelId);
+  let firstTokenSent = false;
+  let sseEventCount = 0;
+
+  // 推送 LLM 状态事件
+  sendEvent("llm_status", { status: "connecting", requestId });
+
   // 客户端断开
   let aborted = false;
   let agentInstance: any = null;
   req.socket.on("close", () => {
     if (!aborted) {
       aborted = true;
+      connectionClosed = true;
       clearInterval(heartbeat);
       agentInstance?.abort();
+
+      // 记录异常断开
+      const duration = Date.now() - connectionStart;
+      logger.warn("sse", "SSE 连接客户端断开", { sessionId, duration, eventCount: sseEventCount });
+
+      // LLM 追踪：中止
+      tracker.onAbort(requestId);
     }
   });
 
@@ -75,6 +105,23 @@ router.post("/stream", async (req: Request, res: Response) => {
     // 订阅事件
     const unsubscribe = agent.subscribe((event: AgentEvent) => {
       if (aborted) return;
+
+      if (event.type === "message_update") {
+        const ae = (event as any).assistantMessageEvent;
+
+        // 首 token 追踪
+        if (!firstTokenSent && ae?.type === "text_delta") {
+          firstTokenSent = true;
+          tracker.onFirstToken(requestId);
+          sendEvent("llm_status", { status: "streaming", requestId, ttft: Date.now() - connectionStart });
+        }
+
+        // 错误消息
+        if (ae?.type === "error") {
+          tracker.onError(requestId, ae.error);
+          sendEvent("llm_status", { status: "error", requestId, error: ae.error });
+        }
+      }
 
       if (event.type === "message_end") {
         const msg = (event as any).message;
@@ -91,8 +138,19 @@ router.post("/stream", async (req: Request, res: Response) => {
         }
       }
 
+      // Tool 调用日志
+      if (event.type === "tool_execution_start") {
+        logger.info("agent", "Tool 调用开始", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId });
+      }
+      if (event.type === "tool_execution_end") {
+        logger.info("agent", "Tool 调用完成", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId, isError: event.isError });
+      }
+
       const sseData = convertToSSE(event);
-      if (sseData) sendEvent(sseData.type, sseData.data);
+      if (sseData) {
+        sendEvent(sseData.type, sseData.data);
+        sseEventCount++;
+      }
     });
 
     await agent.prompt(message);
@@ -104,14 +162,46 @@ router.post("/stream", async (req: Request, res: Response) => {
       await persistMessage(allMsgs[i]);
     }
 
-    if (!aborted) sendEvent("done", { reason: "stop" });
+    if (!aborted) {
+      // LLM 追踪：完成
+      // 从最后一条 assistant 消息获取 usage（pi-agent-core 的 AgentMessage 结构）
+      const lastAssistant = allMsgs.filter((m: any) => m.role === "assistant").pop();
+      const usage = (lastAssistant as any)?.usage;
+      tracker.onComplete(requestId, {
+        inputTokens: usage?.inputTokens,
+        outputTokens: usage?.outputTokens,
+      });
+
+      // 推送最终状态
+      const record = tracker.getById(requestId);
+      sendEvent("llm_status", {
+        status: "completed",
+        requestId,
+        duration: record?.duration,
+        ttft: record?.ttft,
+        inputTokens: record?.inputTokens,
+        outputTokens: record?.outputTokens,
+      });
+
+      sendEvent("done", { reason: "stop" });
+    }
+
     updateSession(sessionId, { messageCount: agent.state.messages.length, modelId: modelId || undefined });
     unsubscribe();
   } catch (err: any) {
-    console.error("[Chat] ❌", err.message);
+    logger.error("sse", "对话处理异常", { sessionId, error: err.message });
+    tracker.onError(requestId, err.message);
+    sendEvent("llm_status", { status: "error", requestId, error: err.message });
     if (!aborted) sendEvent("error", { error: err.message });
   } finally {
     clearInterval(heartbeat);
+
+    // SSE 连接关闭日志
+    if (!connectionClosed) {
+      const duration = Date.now() - connectionStart;
+      logger.info("sse", "SSE 连接关闭", { sessionId, duration, eventCount: sseEventCount });
+    }
+
     if (!res.writableEnded) res.end();
   }
 });

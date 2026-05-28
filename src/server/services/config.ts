@@ -35,11 +35,19 @@ export interface ServerConfig {
   port: number;
 }
 
+/** 日志配置 */
+export interface LoggingConfig {
+  level: "debug" | "info" | "warn" | "error";
+  dir: string;          // 日志文件目录
+  max_days: number;     // 保留天数
+}
+
 /** 完整配置 */
 export interface AppConfig {
   llm: LLMConfig;
   storage: StorageConfig;
   server: ServerConfig;
+  logging: LoggingConfig;
 }
 
 /** 默认配置路径 */
@@ -98,6 +106,11 @@ export function loadConfig(path?: string): AppConfig {
     },
     server: {
       port: parsed.server?.port || 3000,
+    },
+    logging: {
+      level: parsed.logging?.level || "info",
+      dir: parsed.logging?.dir || "./logs",
+      max_days: parsed.logging?.max_days || 7,
     },
   };
 
