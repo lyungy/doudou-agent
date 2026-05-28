@@ -38,6 +38,7 @@ router.put("/", (req, res) => {
 
     const newConfig: AppConfig = {
       llm: { ...current.llm, ...updates.llm },
+      storage: { ...current.storage, ...updates.storage },
       server: { ...current.server, ...updates.server },
     };
 

@@ -3,10 +3,11 @@
  * 双层存储：JSONL（消息，pi-agent-core 原生）+ SQLite（元数据索引）
  */
 import { mkdirSync, existsSync } from "fs";
-import { resolve } from "path";
+import { resolve, isAbsolute } from "path";
 import Database from "better-sqlite3";
 import { JsonlSessionRepo } from "@earendil-works/pi-agent-core";
 import type { Session } from "@earendil-works/pi-agent-core";
+import { getConfig } from "./config.js";
 import { NodeFileSystem } from "./node-fs.js";
 
 /** Session 元数据（SQLite 存储） */
@@ -21,10 +22,16 @@ export interface SessionMeta {
   updatedAt: string;
 }
 
-/** 数据目录 */
-const DATA_DIR = resolve(process.cwd(), ".doudou");
-const SESSIONS_DIR = resolve(DATA_DIR, "sessions");
-const DB_PATH = resolve(DATA_DIR, "doudou.db");
+/** 数据目录（从配置读取，运行时解析） */
+let DATA_DIR = "";
+let SESSIONS_DIR = "";
+let DB_PATH = "";
+
+function resolveDataDir(): string {
+  const config = getConfig();
+  const raw = config.storage.data_dir;
+  return isAbsolute(raw) ? raw : resolve(process.cwd(), raw);
+}
 
 /** SQLite 数据库 */
 let db: Database.Database | null = null;
@@ -36,6 +43,12 @@ let jsonlRepo: JsonlSessionRepo | null = null;
  * 初始化存储系统
  */
 export function initStorage(): void {
+  // 解析数据目录
+  DATA_DIR = resolveDataDir();
+  SESSIONS_DIR = resolve(DATA_DIR, "sessions");
+  DB_PATH = resolve(DATA_DIR, "doudou.db");
+  console.log(`[Storage] 数据目录: ${DATA_DIR}`);
+
   // 确保目录存在
   mkdirSync(SESSIONS_DIR, { recursive: true });
 

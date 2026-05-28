@@ -25,15 +25,20 @@ export interface LLMConfig {
   models: ModelDef[];
 }
 
+/** 存储配置 */
+export interface StorageConfig {
+  data_dir: string;
+}
+
 /** 服务器配置 */
 export interface ServerConfig {
   port: number;
-
 }
 
 /** 完整配置 */
 export interface AppConfig {
   llm: LLMConfig;
+  storage: StorageConfig;
   server: ServerConfig;
 }
 
@@ -87,6 +92,9 @@ export function loadConfig(path?: string): AppConfig {
       base_url: llm.base_url || "https://api.openai.com/v1",
       temperature: llm.temperature,
       models,
+    },
+    storage: {
+      data_dir: parsed.storage?.data_dir || "./.doudou",
     },
     server: {
       port: parsed.server?.port || 3000,

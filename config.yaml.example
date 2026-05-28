@@ -26,5 +26,9 @@ llm:
     #   contextWindow: 1048576
     #   maxTokens: 64000
 
+# 存储配置
+storage:
+  data_dir: ./.doudou        # 数据目录，支持相对路径或绝对路径（如 ~/.doudou）
+
 server:
   port: 3000
