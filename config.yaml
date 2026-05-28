@@ -1,0 +1,23 @@
+llm:
+  provider: openai
+  api_key: tp-cvsujry5bw9okkisrwath6ho7paunxb9rormigtwhg95s2ul
+  base_url: https://token-plan-cn.xiaomimimo.com/v1
+  temperature: 0.7
+
+  models:
+    - id: mimo-v2.5-pro
+      name: MiMo v2.5 Pro
+      reasoning: true
+      input: ["text"]
+      contextWindow: 1048576
+      maxTokens: 64000
+
+    - id: mimo-v2.5
+      name: MiMo v2.5
+      reasoning: true
+      input: ["text", "image"]
+      contextWindow: 262144
+      maxTokens: 32000
+
+server:
+  port: 3000
