@@ -92,7 +92,13 @@ export function SessionItem({ session, isActive, selectable, selected, onSelect,
           } outline-none px-0.5 py-0.5`}
         />
       ) : (
-        <span className="text-sm truncate flex-1">{session.title}</span>
+        <span
+          className="text-sm truncate flex-1"
+          onDoubleClick={startEdit}
+          title="双击重命名"
+        >
+          {session.title}
+        </span>
       )}
 
       {/* 消息数 badge */}
