@@ -152,7 +152,11 @@ class Logger {
     this.writeToFile(entry);
 
     // 控制台输出（保留原有的终端可见性）
-    const prefix = `[${level.toUpperCase()}][${module}]`;
+    const dt = new Date(entry.timestamp);
+    const date = dt.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
+    const time = dt.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const ms = String(dt.getMilliseconds()).padStart(3, "0");
+    const prefix = `${date} ${time}.${ms} [${level.toUpperCase()}][${module}]`;
     const metaStr = meta ? ` ${JSON.stringify(meta)}` : "";
     const line = `${prefix} ${message}${metaStr}`;
 
