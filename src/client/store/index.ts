@@ -316,7 +316,7 @@ function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         id: `user-${messages.length}`,
         type: "user",
         content,
-        timestamp: Date.now(),
+        timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
       });
     } else if (msg.role === "assistant") {
       const textParts =
@@ -347,7 +347,7 @@ function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         content: textParts,
         thinking: thinkingParts || undefined,
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
-        timestamp: Date.now(),
+        timestamp: msg.timestamp ? new Date(msg.timestamp).getTime() : Date.now(),
       });
     }
   }

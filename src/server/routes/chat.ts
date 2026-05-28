@@ -6,7 +6,7 @@ import type { Request, Response } from "express";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModelById } from "../services/config.js";
 import { getSession, updateSession, openSession } from "../services/session.js";
-import { getOrCreateAgent } from "../services/agent.js";
+import { getOrCreateAgent, abortAgent } from "../services/agent.js";
 
 const router = Router();
 
@@ -119,7 +119,6 @@ router.post("/stream", async (req: Request, res: Response) => {
 router.post("/abort", (req: Request, res: Response) => {
   const { sessionId } = req.body;
   if (!sessionId) return res.status(400).json({ error: "缺少 sessionId" });
-  const { abortAgent } = require("../services/agent.js");
   abortAgent(sessionId);
   res.json({ ok: true });
 });

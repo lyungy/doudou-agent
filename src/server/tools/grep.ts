@@ -25,7 +25,7 @@ export const grepTool: AgentTool<typeof GrepParams> = {
     const ignoreCase = params.ignore_case || false;
     const results: string[] = [];
 
-    const regex = new RegExp(params.pattern, ignoreCase ? "gi" : "g");
+    const regex = new RegExp(params.pattern, ignoreCase ? "i" : "");
 
     function searchFile(filePath: string) {
       if (results.length >= maxResults) return;
@@ -39,8 +39,6 @@ export const grepTool: AgentTool<typeof GrepParams> = {
           if (regex.test(line)) {
             results.push(`${relative(process.cwd(), filePath)}:${idx + 1}: ${line.trim()}`);
           }
-          // 重置 regex lastIndex（因为使用了 g 标志）
-          regex.lastIndex = 0;
         });
       } catch {
         // 跳过无法读取的文件

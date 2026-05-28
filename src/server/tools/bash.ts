@@ -1,9 +1,9 @@
 /**
- * Bash 命令执行工具
+ * Bash 命令执行工具（异步）
  */
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { execSync } from "child_process";
+import { exec } from "child_process";
 
 const BashParams = Type.Object({
   command: Type.String({ description: "要执行的 shell 命令" }),
@@ -20,37 +20,39 @@ export const bashTool: AgentTool<typeof BashParams> = {
   execute: async (toolCallId, params, signal, onUpdate) => {
     const timeout = (params.timeout || 60) * 1000;
 
-    try {
-      const output = execSync(params.command, {
-        cwd: params.cwd || process.cwd(),
-        timeout,
-        encoding: "utf-8",
-        maxBuffer: 1024 * 1024 * 10, // 10MB
-        stdio: ["pipe", "pipe", "pipe"],
+    return new Promise((resolve) => {
+      const child = exec(
+        params.command,
+        {
+          cwd: params.cwd || process.cwd(),
+          timeout,
+          maxBuffer: 1024 * 1024 * 10, // 10MB
+          encoding: "utf-8",
+        },
+        (err, stdout, stderr) => {
+          const output = (stdout || "") + (stderr || "");
+          const maxLen = 50000;
+          const truncated = output.length > maxLen;
+          const text = truncated ? output.slice(0, maxLen) + "\n\n... [输出过长，已截断]" : output;
+
+          if (err) {
+            resolve({
+              content: [{ type: "text", text: text || `命令执行失败: ${err.message}` }],
+              details: { command: params.command, exitCode: (err as any).status || 1, error: true, truncated },
+            });
+          } else {
+            resolve({
+              content: [{ type: "text", text: text || "(命令执行成功，无输出)" }],
+              details: { command: params.command, exitCode: 0, truncated },
+            });
+          }
+        }
+      );
+
+      // 支持 abort signal
+      signal?.addEventListener("abort", () => {
+        child.kill("SIGTERM");
       });
-
-      // 截断过长输出
-      const maxLen = 50000;
-      const truncated = output.length > maxLen;
-      const text = truncated ? output.slice(0, maxLen) + "\n\n... [输出过长，已截断]" : output;
-
-      return {
-        content: [{ type: "text", text: text || "(命令执行成功，无输出)" }],
-        details: { command: params.command, exitCode: 0, truncated },
-      };
-    } catch (err: any) {
-      const stderr = err.stderr || "";
-      const stdout = err.stdout || "";
-      const output = stdout + stderr;
-
-      const maxLen = 50000;
-      const truncated = output.length > maxLen;
-      const text = truncated ? output.slice(0, maxLen) + "\n\n... [输出过长，已截断]" : output;
-
-      return {
-        content: [{ type: "text", text: text || `命令执行失败: ${err.message}` }],
-        details: { command: params.command, exitCode: err.status || 1, error: true, truncated },
-      };
-    }
+    });
   },
 };
