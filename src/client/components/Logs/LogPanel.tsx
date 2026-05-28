@@ -103,10 +103,23 @@ export function LogPanel() {
             {entries.length === 0 ? (
               <p className="text-sm text-neutral-400 py-8 text-center">暂无日志</p>
             ) : (
-              <div className="space-y-1">
-                {entries.map((entry, i) => (
-                  <LogRow key={i} entry={entry} />
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm font-mono border-collapse">
+                  <thead>
+                    <tr className="text-left text-neutral-500 border-b-2 border-neutral-200">
+                      <th className="pb-2 pr-4 font-semibold w-[190px]">时间</th>
+                      <th className="pb-2 pr-3 font-semibold w-[60px]">级别</th>
+                      <th className="pb-2 pr-3 font-semibold w-[70px]">模块</th>
+                      <th className="pb-2 pr-3 font-semibold">消息</th>
+                      <th className="pb-2 font-semibold w-[200px]">详情</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map((entry, i) => (
+                      <LogRow key={i} entry={entry} />
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </>
@@ -118,7 +131,7 @@ export function LogPanel() {
   );
 }
 
-/** 日志行 */
+/** 日志行（表格行） */
 function LogRow({ entry }: { entry: LogEntry }) {
   const levelColors: Record<string, string> = {
     debug: "bg-neutral-100 text-neutral-500",
@@ -135,37 +148,44 @@ function LogRow({ entry }: { entry: LogEntry }) {
     system: "bg-neutral-100 text-neutral-600",
   };
 
-  const time = new Date(entry.timestamp).toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  // 完整时间格式：2026-05-28 23:27:05.123
+  const dt = new Date(entry.timestamp);
+  const date = dt.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
+  const time = dt.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const ms = String(dt.getMilliseconds()).padStart(3, "0");
 
   return (
-    <div className="flex items-start gap-2 py-1.5 px-3 rounded-lg hover:bg-neutral-50 text-sm font-mono group">
-      {/* 时间 */}
-      <span className="text-neutral-400 shrink-0 w-[72px]">{time}</span>
+    <tr className="border-b border-neutral-100 hover:bg-blue-50/40 group">
+      {/* 时间 — 最前、最醒目 */}
+      <td className="py-1.5 pr-4 text-neutral-500 whitespace-nowrap">
+        <span className="text-neutral-700 font-medium">{date} {time}</span>
+        <span className="text-neutral-400">.{ms}</span>
+      </td>
 
       {/* 级别 */}
-      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${levelColors[entry.level] || ""}`}>
-        {entry.level.toUpperCase()}
-      </span>
+      <td className="py-1.5 pr-3">
+        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${levelColors[entry.level] || ""}`}>
+          {entry.level.toUpperCase()}
+        </span>
+      </td>
 
       {/* 模块 */}
-      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${moduleColors[entry.module] || "bg-neutral-100 text-neutral-500"}`}>
-        {entry.module}
-      </span>
+      <td className="py-1.5 pr-3">
+        <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ${moduleColors[entry.module] || "bg-neutral-100 text-neutral-500"}`}>
+          {entry.module}
+        </span>
+      </td>
 
       {/* 消息 */}
-      <span className="text-neutral-700 break-all">{entry.message}</span>
+      <td className="py-1.5 pr-3 text-neutral-700">{entry.message}</td>
 
-      {/* meta（hover 展开） */}
-      {entry.meta && (
-        <span className="hidden group-hover:inline text-neutral-400 text-xs ml-2">
-          {JSON.stringify(entry.meta)}
-        </span>
-      )}
-    </div>
+      {/* 详情（hover 显示） */}
+      <td className="py-1.5 text-neutral-400 text-xs">
+        {entry.meta ? (
+          <span className="hidden group-hover:inline break-all">{JSON.stringify(entry.meta)}</span>
+        ) : null}
+      </td>
+    </tr>
   );
 }
 
