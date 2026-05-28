@@ -2,11 +2,29 @@
  * Agent 服务：管理 Agent 实例的生命周期
  * 每个 Session 对应一个 Agent 实例
  */
+import { readFileSync, existsSync } from "fs";
+import { resolve } from "path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import { getConfig } from "./config.js";
 import { tools } from "../tools/index.js";
+
+/** 默认系统提示词 */
+const DEFAULT_SYSTEM_PROMPT = "你是一个有用的 AI 助手。请用中文回答。";
+
+/** 加载 AGENT.md 作为系统提示词 */
+function loadSystemPrompt(): string {
+  const agentMd = resolve(process.cwd(), "AGENT.md");
+  if (existsSync(agentMd)) {
+    const content = readFileSync(agentMd, "utf-8").trim();
+    if (content) {
+      console.log("[Agent] 已加载 AGENT.md 作为系统提示词");
+      return content;
+    }
+  }
+  return DEFAULT_SYSTEM_PROMPT;
+}
 
 /** 活跃的 Agent 实例映射（sessionId → Agent） */
 const agents = new Map<string, Agent>();
@@ -34,7 +52,7 @@ export function getOrCreateAgent(
 
   const agent = new Agent({
     initialState: {
-      systemPrompt: systemPrompt || "你是一个有用的 AI 助手。请用中文回答。",
+      systemPrompt: systemPrompt || loadSystemPrompt(),
       model,
       tools: tools as any,
       thinkingLevel: "off",
