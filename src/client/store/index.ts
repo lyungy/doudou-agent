@@ -328,14 +328,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({ currentThinking: state.currentThinking + delta })),
 
   _addToolCall: (tc) =>
-    set((state) => ({ currentToolCalls: [...state.currentToolCalls, tc] })),
+    set((state) => {
+      const newToolCalls = [...state.currentToolCalls, tc];
+      // 实时同步到当前消息
+      const messages = [...state.messages];
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.type === "assistant") {
+        messages[messages.length - 1] = { ...lastMsg, toolCalls: [...newToolCalls] };
+      }
+      return { currentToolCalls: newToolCalls, messages };
+    }),
 
   _updateToolCall: (id, updates) =>
-    set((state) => ({
-      currentToolCalls: state.currentToolCalls.map((tc) =>
+    set((state) => {
+      const newToolCalls = state.currentToolCalls.map((tc) =>
         tc.id === id ? { ...tc, ...updates } : tc
-      ),
-    })),
+      );
+      // 实时同步到当前消息
+      const messages = [...state.messages];
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.type === "assistant") {
+        messages[messages.length - 1] = { ...lastMsg, toolCalls: [...newToolCalls] };
+      }
+      return { currentToolCalls: newToolCalls, messages };
+    }),
 
   _commitAssistantMessage: () =>
     set((state) => {

@@ -35,22 +35,22 @@ export function MessageBubble({ message, isStreaming }: Props) {
           <ThinkingBlock content={message.thinking} isUser={isUser} />
         )}
 
-        {/* 消息正文 */}
+        {/* 工具调用（先于文本发生，渲染在前） */}
+        {message.toolCalls && message.toolCalls.length > 0 && (
+          <div className="mb-2 space-y-1.5">
+            {message.toolCalls.map((tc) => (
+              <ToolCallCard key={tc.id} toolCall={tc} />
+            ))}
+          </div>
+        )}
+
+        {/* 消息正文（工具调用结果返回后，LLM 的最终回复） */}
         {message.content && (
           <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">
             {message.content}
             {isStreaming && (
               <span className="inline-block w-[3px] h-4 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full ml-0.5 align-text-bottom animate-pulse" />
             )}
-          </div>
-        )}
-
-        {/* 工具调用 */}
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-2 space-y-1.5">
-            {message.toolCalls.map((tc) => (
-              <ToolCallCard key={tc.id} toolCall={tc} />
-            ))}
           </div>
         )}
 
