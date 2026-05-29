@@ -22,9 +22,13 @@
     "@earendil-works/pi-ai": "^0.76.0",
     "better-sqlite3": "^12.10.0",
     "express": "^5.2.1",
+    "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-markdown": "^10.1.0",
+    "rehype-highlight": "^7.0.2",
+    "remark-gfm": "^4.0.1",
     "typebox": "^1.1.38",
     "zustand": "^5.0.13"
   },

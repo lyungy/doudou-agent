@@ -4,6 +4,7 @@
 import type { ChatMessage } from "../../types";
 import { ToolCallCard } from "./ToolCallCard";
 import { ThinkingBlock } from "./ThinkingBlock";
+import { MarkdownRenderer } from "./MarkdownRenderer";
 
 interface Props {
   message: ChatMessage;
@@ -44,10 +45,16 @@ export function MessageBubble({ message, isStreaming }: Props) {
           </div>
         )}
 
-        {/* 消息正文（工具调用结果返回后，LLM 的最终回复） */}
+        {/* 消息正文 */}
         {message.content && (
-          <div className="whitespace-pre-wrap break-words text-[14px] leading-relaxed">
-            {message.content}
+          <div className="break-words text-[14px] leading-relaxed">
+            {isUser ? (
+              /* 用户消息：纯文本 */
+              <span className="whitespace-pre-wrap">{message.content}</span>
+            ) : (
+              /* AI 消息：Markdown 渲染 */
+              <MarkdownRenderer content={message.content} />
+            )}
             {isStreaming && (
               <span className="inline-block w-[3px] h-4 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full ml-0.5 align-text-bottom animate-pulse" />
             )}
