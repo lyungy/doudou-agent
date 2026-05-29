@@ -1,21 +1,18 @@
 /**
  * LLM 状态指示器
  * 显示当前 LLM 请求的状态：连接中 → 推理中 → 完成/错误
+ * 状态 per-session，切换 session 自动切换显示
  */
 import { useAppStore } from "../../store";
 
 export function LLMStatusBar() {
-  const {
-    llmStatus,
-    llmTtft,
-    llmDuration,
-    llmInputTokens,
-    llmOutputTokens,
-    llmError,
-  } = useAppStore();
+  const currentSessionId = useAppStore((s) => s.currentSessionId);
+  const llmStatusBySession = useAppStore((s) => s.llmStatusBySession);
 
-  // 没有状态时不显示
-  if (!llmStatus) return null;
+  const status = currentSessionId ? llmStatusBySession[currentSessionId] : null;
+  if (!status) return null;
+
+  const { status: llmStatus, ttft: llmTtft, duration: llmDuration, inputTokens: llmInputTokens, outputTokens: llmOutputTokens, error: llmError } = status;
 
   return (
     <div className="flex items-center gap-3 px-4 py-1.5 text-xs border-t border-neutral-100 bg-neutral-50">

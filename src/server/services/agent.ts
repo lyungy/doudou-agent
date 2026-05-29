@@ -51,12 +51,19 @@ export function getOrCreateAgent(
   const config = getConfig();
   const apiKey = config.llm.api_key;
 
+  // 使用配置的 thinking level；模型不支持 thinking 时降级为 off
+  let thinkingLevel = config.llm.thinking_level || "off";
+  if (thinkingLevel !== "off" && !model.reasoning) {
+    getLogger().warn("agent", `模型 ${model.id} 不支持 thinking，自动降级为 off`);
+    thinkingLevel = "off";
+  }
+
   const agent = new Agent({
     initialState: {
       systemPrompt: systemPrompt || loadSystemPrompt(),
       model,
       tools: tools as any,
-      thinkingLevel: "off",
+      thinkingLevel,
     },
     getApiKey: () => apiKey,
     toolExecution: "parallel",

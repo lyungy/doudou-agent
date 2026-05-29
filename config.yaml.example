@@ -3,6 +3,7 @@ llm:
   api_key: sk-you-api-key-here
   base_url: https://api.openai.com/v1
   temperature: 0.7
+  thinking_level: medium   # off | minimal | low | medium | high | xhigh
 
   models:
     - id: gpt-4o

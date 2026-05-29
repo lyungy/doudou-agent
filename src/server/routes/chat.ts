@@ -17,7 +17,7 @@ const router = Router();
  * POST /api/chat/stream — SSE 流式对话
  */
 router.post("/stream", async (req: Request, res: Response) => {
-  const { sessionId, message, modelId } = req.body;
+  const { sessionId, message, modelId, thinkingLevel } = req.body;
   const logger = getLogger();
   const tracker = getLLMTracker();
 
@@ -101,6 +101,19 @@ router.post("/stream", async (req: Request, res: Response) => {
     const model = getModelById(modelId || sessionMeta.modelId || undefined);
     const agent = getOrCreateAgent(sessionId, model);
     agentInstance = agent;
+
+    // 支持请求级 thinkingLevel 覆盖
+    if (thinkingLevel && typeof thinkingLevel === "string") {
+      const validLevels = ["off", "minimal", "low", "medium", "high", "xhigh"];
+      if (validLevels.includes(thinkingLevel)) {
+        // 模型不支持 thinking 时降级
+        if (thinkingLevel !== "off" && !model.reasoning) {
+          agent.state.thinkingLevel = "off";
+        } else {
+          agent.state.thinkingLevel = thinkingLevel as any;
+        }
+      }
+    }
 
     // 订阅事件
     const unsubscribe = agent.subscribe((event: AgentEvent) => {

@@ -1,7 +1,7 @@
 /**
  * API 请求封装
  */
-import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord } from "../types";
+import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel } from "../types";
 
 const BASE = "/api";
 
@@ -76,7 +76,7 @@ export async function updateConfig(config: Partial<AppConfig>): Promise<any> {
 
 // ============ Models API ============
 
-export async function fetchModels(): Promise<ModelDef[]> {
+export async function fetchModels(): Promise<{ models: ModelDef[]; thinkingLevel: string }> {
   return request("/config/models");
 }
 
@@ -104,12 +104,13 @@ export async function streamChat(
   message: string,
   callbacks: ChatStreamCallbacks,
   signal?: AbortSignal,
-  modelId?: string
+  modelId?: string,
+  thinkingLevel?: ThinkingLevel
 ): Promise<void> {
   const response = await fetch(`${BASE}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, message, modelId }),
+    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel }),
     signal,
   });
 

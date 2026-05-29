@@ -2,7 +2,7 @@
  * Zustand 全局状态管理
  */
 import { create } from "zustand";
-import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData } from "../types";
+import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel } from "../types";
 import * as api from "../lib/client";
 
 interface AppState {
@@ -16,6 +16,10 @@ interface AppState {
   currentSessionId: string | null;
   loadingSessions: boolean;
 
+  // 思考等级
+  thinkingLevel: ThinkingLevel;
+  setThinkingLevel: (level: ThinkingLevel) => void;
+
   // 对话状态
   messages: ChatMessage[];
   isStreaming: boolean;
@@ -26,15 +30,11 @@ interface AppState {
   currentThinking: string;
   currentToolCalls: ToolCallInfo[];
 
-  // LLM 实时状态
-  llmStatus: LLMRequestStatus | null;
-  llmRequestId: string | null;
-  llmTtft: number | null;
-  llmDuration: number | null;
-  llmInputTokens: number | null;
-  llmOutputTokens: number | null;
-  llmError: string | null;
-  setLLMStatus: (data: LLMStatusData | null) => void;
+  // LLM 状态（per-session）
+  llmStatusBySession: Record<string, LLMStatusData>;
+  /** 获取当前 session 的 LLM 状态 */
+  getCurrentLLMStatus: () => LLMStatusData | null;
+  setLLMStatus: (sessionId: string, data: LLMStatusData | null) => void;
 
   // 操作
   loadModels: () => Promise<void>;
@@ -68,35 +68,39 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
   currentSessionId: null,
   loadingSessions: false,
+
+  // 对话状态
   messages: [],
   isStreaming: false,
   streamingMessageId: null,
+
+  // 思考等级
+  thinkingLevel: "medium" as ThinkingLevel,
+  setThinkingLevel: (level) => set({ thinkingLevel: level }),
+
+  // 当前正在构建的消息
   currentText: "",
   currentThinking: "",
   currentToolCalls: [],
 
-  // LLM 状态
-  llmStatus: null,
-  llmRequestId: null,
-  llmTtft: null,
-  llmDuration: null,
-  llmInputTokens: null,
-  llmOutputTokens: null,
-  llmError: null,
+  // LLM 状态（per-session）
+  llmStatusBySession: {},
 
-  setLLMStatus: (data) => {
-    if (!data) {
-      set({ llmStatus: null, llmRequestId: null, llmTtft: null, llmDuration: null, llmInputTokens: null, llmOutputTokens: null, llmError: null });
-      return;
-    }
-    set({
-      llmStatus: data.status as LLMRequestStatus,
-      llmRequestId: data.requestId,
-      llmTtft: data.ttft ?? null,
-      llmDuration: data.duration ?? null,
-      llmInputTokens: data.inputTokens ?? null,
-      llmOutputTokens: data.outputTokens ?? null,
-      llmError: data.error ?? null,
+  getCurrentLLMStatus: () => {
+    const { currentSessionId, llmStatusBySession } = get();
+    if (!currentSessionId) return null;
+    return llmStatusBySession[currentSessionId] || null;
+  },
+
+  setLLMStatus: (sessionId, data) => {
+    set((state) => {
+      const next = { ...state.llmStatusBySession };
+      if (!data) {
+        delete next[sessionId];
+      } else {
+        next[sessionId] = data;
+      }
+      return { llmStatusBySession: next };
     });
   },
 
@@ -105,9 +109,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadModels: async () => {
     set({ loadingModels: true });
     try {
-      const models = await api.fetchModels();
+      const { models, thinkingLevel } = await api.fetchModels();
       const currentModelId = models[0]?.id || "";
-      set({ models, currentModelId, loadingModels: false });
+      const validLevels = ["off", "minimal", "low", "medium", "high", "xhigh"];
+      const tl = validLevels.includes(thinkingLevel) ? thinkingLevel as ThinkingLevel : "off" as ThinkingLevel;
+      set({ models, currentModelId, thinkingLevel: tl, loadingModels: false });
     } catch {
       set({ loadingModels: false });
     }
@@ -246,19 +252,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentText: "",
       currentThinking: "",
       currentToolCalls: [],
-      llmStatus: "connecting" as LLMRequestStatus,
-      llmRequestId: null,
-      llmTtft: null,
-      llmDuration: null,
-      llmInputTokens: null,
-      llmOutputTokens: null,
-      llmError: null,
+      llmStatusBySession: {
+        ...state.llmStatusBySession,
+        [sessionId]: { status: "connecting" } as LLMStatusData,
+      },
     }));
 
     abortController = new AbortController();
 
     try {
       const modelId = get().currentModelId;
+      const thinkingLevel = get().thinkingLevel;
       await api.streamChat(sessionId, content, {
         onTextDelta: (delta) => get()._appendText(delta),
         onThinkingStart: () => get()._setThinking(""),
@@ -273,7 +277,8 @@ export const useAppStore = create<AppState>((set, get) => ({
           get()._updateToolCall(data.toolCallId, { result: data.result, status: data.isError ? "error" : "done", isError: data.isError });
         },
         onLLMStatus: (data) => {
-          get().setLLMStatus({
+          const sid = sessionId;
+          get().setLLMStatus(sid, {
             status: data.status as LLMRequestStatus,
             requestId: data.requestId,
             ttft: data.ttft,
@@ -281,7 +286,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             inputTokens: data.inputTokens,
             outputTokens: data.outputTokens,
             error: data.error,
-          });
+          } as LLMStatusData);
         },
         onDone: () => {
           get()._commitAssistantMessage();
@@ -292,7 +297,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });
         },
-      }, abortController.signal, modelId || undefined);
+      }, abortController.signal, modelId || undefined, thinkingLevel);
     } catch (err: any) {
       if (err.name !== "AbortError") {
         get()._commitAssistantMessage();

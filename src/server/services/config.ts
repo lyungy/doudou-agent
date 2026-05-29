@@ -5,6 +5,7 @@ import { readFileSync, existsSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import yaml from "js-yaml";
 import type { Model } from "@earendil-works/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 /** 单个模型定义 */
 export interface ModelDef {
@@ -16,12 +17,16 @@ export interface ModelDef {
   maxTokens?: number;
 }
 
+/** 思考等级类型 */
+export type { ThinkingLevel };
+
 /** LLM 共享配置（api_key、base_url 等） */
 export interface LLMConfig {
   provider: string;
   api_key: string;
   base_url: string;
   temperature?: number;
+  thinking_level: ThinkingLevel;
   models: ModelDef[];
 }
 
@@ -93,12 +98,20 @@ export function loadConfig(path?: string): AppConfig {
     }];
   }
 
+  // 验证 thinking_level 合法性
+  const validLevels: string[] = ["off", "minimal", "low", "medium", "high", "xhigh"];
+  const thinkingLevel = llm.thinking_level || "off";
+  if (!validLevels.includes(thinkingLevel)) {
+    throw new Error(`无效的 thinking_level: ${thinkingLevel}，可选值: ${validLevels.join(", ")}`);
+  }
+
   const config: AppConfig = {
     llm: {
       provider: llm.provider || "openai",
       api_key: llm.api_key,
       base_url: llm.base_url || "https://api.openai.com/v1",
       temperature: llm.temperature,
+      thinking_level: thinkingLevel as ThinkingLevel,
       models,
     },
     storage: {

@@ -40,6 +40,9 @@ export interface ModelDef {
   maxTokens?: number;
 }
 
+/** 思考等级 */
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 /** 聊天消息类型 */
 export type ChatMessageType = "user" | "assistant" | "thinking" | "tool";
 
@@ -100,7 +103,7 @@ export interface LLMRequestRecord {
 /** LLM 实时状态数据 */
 export interface LLMStatusData {
   status: LLMRequestStatus;
-  requestId: string;
+  requestId?: string;
   ttft?: number;
   duration?: number;
   inputTokens?: number;

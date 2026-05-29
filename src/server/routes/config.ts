@@ -57,12 +57,16 @@ router.put("/", (req, res) => {
 
 /**
  * GET /api/models
- * 获取可用模型列表
+ * 获取可用模型列表 + thinking_level 默认值
  */
 router.get("/models", (req, res) => {
   try {
+    const config = getConfig();
     const models = listModels();
-    res.json(models);
+    res.json({
+      models,
+      thinkingLevel: config.llm.thinking_level || "off",
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
