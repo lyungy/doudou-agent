@@ -5,7 +5,7 @@
  * - 文件写入：JSONL 按天滚动，自动清理过期文件
  * - 内存缓存：环形缓冲区（最近 1000 条）供 API 查询
  */
-import { mkdirSync, readdirSync, unlinkSync, appendFileSync, existsSync } from "fs";
+import { mkdirSync, readdirSync, unlinkSync, appendFileSync, existsSync, readFileSync } from "fs";
 import { resolve, join } from "path";
 
 /** 日志级别（数值越小优先级越高） */
@@ -54,6 +54,8 @@ class Logger {
     this.config = config;
     // 确保日志目录存在
     mkdirSync(config.dir, { recursive: true });
+    // 启动时加载历史日志到缓冲区
+    this.loadRecentLogs();
     // 启动时清理过期日志
     this.cleanup();
   }
@@ -104,6 +106,41 @@ class Logger {
     const paged = entries.slice(offset, offset + limit);
 
     return { entries: paged, total };
+  }
+
+  /**
+   * 启动时加载最近的日志文件到内存缓冲区
+   * 按日期从新到旧加载，直到缓冲区满
+   */
+  private loadRecentLogs(): void {
+    try {
+      const files = readdirSync(this.config.dir)
+        .filter((f) => f.endsWith(".log"))
+        .sort(); // 旧文件在前
+
+      for (const file of files) {
+        if (this.count >= BUFFER_SIZE) break;
+
+        const filePath = join(this.config.dir, file);
+        const content = readFileSync(filePath, "utf-8");
+        const lines = content.trim().split("\n").filter(Boolean);
+
+        // 从旧到新逐行填入缓冲区
+        for (let i = 0; i < lines.length; i++) {
+          if (this.count >= BUFFER_SIZE) break;
+          try {
+            const entry = JSON.parse(lines[i]) as LogEntry;
+            if (entry.timestamp && entry.level && entry.module && entry.message) {
+              this.pushToBuffer(entry);
+            }
+          } catch {
+            // 跳过解析失败的行
+          }
+        }
+      }
+    } catch {
+      // 读取失败不影响启动
+    }
   }
 
   /**
