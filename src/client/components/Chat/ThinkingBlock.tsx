@@ -1,15 +1,23 @@
 /**
- * Thinking 块组件（可折叠 + 视觉优化）
+ * Thinking 块组件（可折叠 + 流式自动展开）
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Props {
   content: string;
   isUser?: boolean;
+  isStreaming?: boolean;
 }
 
-export function ThinkingBlock({ content, isUser }: Props) {
+export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
   const [expanded, setExpanded] = useState(false);
+
+  // 流式输出时自动展开
+  useEffect(() => {
+    if (isStreaming && content) {
+      setExpanded(true);
+    }
+  }, [isStreaming, content]);
 
   if (!content) return null;
 
@@ -24,7 +32,7 @@ export function ThinkingBlock({ content, isUser }: Props) {
         }`}
       >
         <span className="text-[11px]">🧠</span>
-        <span>思考中...</span>
+        <span>{isStreaming ? "思考中..." : "思考过程"}</span>
         <span className="text-[10px] opacity-60">{expanded ? "▼" : "▶"}</span>
       </button>
 

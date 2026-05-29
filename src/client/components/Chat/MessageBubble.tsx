@@ -32,7 +32,7 @@ export function MessageBubble({ message, isStreaming }: Props) {
       >
         {/* Thinking 内容 */}
         {message.thinking && (
-          <ThinkingBlock content={message.thinking} isUser={isUser} />
+          <ThinkingBlock content={message.thinking} isUser={isUser} isStreaming={isStreaming} />
         )}
 
         {/* 工具调用（先于文本发生，渲染在前） */}

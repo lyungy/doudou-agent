@@ -330,7 +330,15 @@ export const useAppStore = create<AppState>((set, get) => ({
   _setThinking: (text) => set({ currentThinking: text }),
 
   _appendThinking: (delta) =>
-    set((state) => ({ currentThinking: state.currentThinking + delta })),
+    set((state) => {
+      const newThinking = state.currentThinking + delta;
+      const messages = [...state.messages];
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.type === "assistant") {
+        messages[messages.length - 1] = { ...lastMsg, thinking: newThinking || undefined };
+      }
+      return { currentThinking: newThinking, messages };
+    }),
 
   _addToolCall: (tc) =>
     set((state) => {
@@ -402,7 +410,7 @@ function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
       const thinkingParts =
         msg.content
           ?.filter((c: any) => c.type === "thinking")
-          .map((c: any) => c.text)
+          .map((c: any) => c.thinking || c.text || "")
           .join("") || "";
       const toolCalls = msg.content
         ?.filter((c: any) => c.type === "toolCall")
