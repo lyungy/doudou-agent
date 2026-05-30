@@ -15,6 +15,7 @@ import sessionRouter from "./routes/session.js";
 import chatRouter from "./routes/chat.js";
 import logsRouter from "./routes/logs.js";
 import tasksRouter from "./routes/tasks.js";
+import statsRouter from "./routes/stats.js";
 
 // 加载配置
 const config = loadConfig(resolve(process.cwd(), "config.yaml"));
@@ -63,6 +64,7 @@ app.use("/api/sessions", sessionRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/logs", logsRouter);
 app.use("/api/tasks", tasksRouter);
+app.use("/api/stats", statsRouter);
 
 // 健康检查
 app.get("/api/health", (req, res) => {

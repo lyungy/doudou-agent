@@ -276,3 +276,69 @@ export async function fetchTaskRuns(taskId?: string, limit = 50): Promise<TaskRu
   const data = await request<{ runs: TaskRun[] }>(url);
   return data.runs;
 }
+
+// ============ Stats API ============
+
+export interface StatsOverview {
+  totalSessions: number;
+  totalMessages: number;
+  totalLLMRequests: number;
+  totalTokens: number;
+}
+
+export interface DailyStats {
+  days: {
+    date: string;
+    sessions: number;
+    messages: number;
+    llmRequests: number;
+  }[];
+}
+
+export interface ModelStats {
+  models: {
+    modelId: string;
+    count: number;
+  }[];
+}
+
+export interface PerformanceStats {
+  days: {
+    date: string;
+    avgTTFT: number;
+    avgDuration: number;
+    p50TTFT: number;
+    p95TTFT: number;
+    requestCount: number;
+  }[];
+}
+
+export interface ErrorStats {
+  days: {
+    date: string;
+    llmErrors: number;
+    taskFailures: number;
+  }[];
+  totalLLMErrors: number;
+  totalTaskFailures: number;
+}
+
+export async function fetchStatsOverview(): Promise<StatsOverview> {
+  return request("/stats/overview");
+}
+
+export async function fetchStatsDaily(days = 7): Promise<DailyStats> {
+  return request(`/stats/daily?days=${days}`);
+}
+
+export async function fetchStatsModels(): Promise<ModelStats> {
+  return request("/stats/models");
+}
+
+export async function fetchStatsPerformance(days = 7): Promise<PerformanceStats> {
+  return request(`/stats/performance?days=${days}`);
+}
+
+export async function fetchStatsErrors(days = 7): Promise<ErrorStats> {
+  return request(`/stats/errors?days=${days}`);
+}

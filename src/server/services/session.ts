@@ -99,7 +99,7 @@ function getRepo(): JsonlSessionRepo {
 /**
  * 获取数据库实例
  */
-function getDb(): Database.Database {
+export function getDb(): Database.Database {
   if (!db) {
     throw new Error("存储系统未初始化，请先调用 initStorage()");
   }
