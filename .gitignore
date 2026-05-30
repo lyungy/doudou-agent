@@ -23,6 +23,9 @@ Thumbs.db
 npm-debug.log*
 /logs/
 
+# Runtime task data
+data/
+
 # Config (contains API keys)
 config.yaml
 
