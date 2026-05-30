@@ -1,0 +1,90 @@
+/**
+ * 定时任务路由
+ * GET    /api/tasks              — 获取所有任务
+ * POST   /api/tasks              — 创建任务
+ * PUT    /api/tasks/:id          — 更新任务
+ * DELETE /api/tasks/:id          — 删除任务
+ * POST   /api/tasks/:id/toggle   — 启用/禁用
+ * POST   /api/tasks/:id/trigger  — 手动触发
+ * GET    /api/tasks/:id/runs     — 查询任务执行日志
+ * GET    /api/tasks/runs         — 查询所有执行日志
+ */
+import { Router } from "express";
+import type { Request, Response } from "express";
+import { getTaskScheduler, type TaskInput } from "../services/task-scheduler.js";
+
+const router = Router();
+
+/** GET / — 获取所有任务 */
+router.get("/", (_req: Request, res: Response) => {
+  const scheduler = getTaskScheduler();
+  res.json({ tasks: scheduler.getAll() });
+});
+
+/** POST / — 创建任务 */
+router.post("/", (req: Request, res: Response) => {
+  const { name, prompt, cron, type, enabled, timeout, modelId } = req.body;
+
+  if (!name || !prompt || !cron || !type) {
+    return res.status(400).json({ error: "缺少必填字段: name, prompt, cron, type" });
+  }
+
+  const input: TaskInput = { name, prompt, cron, type, enabled, timeout, modelId };
+  const scheduler = getTaskScheduler();
+  const task = scheduler.create(input);
+  res.status(201).json({ task });
+});
+
+/** PUT /:id — 更新任务 */
+router.put("/:id", (req: Request, res: Response) => {
+  const scheduler = getTaskScheduler();
+  const task = scheduler.update(req.params.id as string, req.body);
+  if (!task) return res.status(404).json({ error: "任务不存在" });
+  res.json({ task });
+});
+
+/** DELETE /:id — 删除任务 */
+router.delete("/:id", (req: Request, res: Response) => {
+  const scheduler = getTaskScheduler();
+  const ok = scheduler.delete(req.params.id as string);
+  if (!ok) return res.status(404).json({ error: "任务不存在" });
+  res.json({ ok: true });
+});
+
+/** POST /:id/toggle — 启用/禁用 */
+router.post("/:id/toggle", (req: Request, res: Response) => {
+  const { enabled } = req.body;
+  if (typeof enabled !== "boolean") {
+    return res.status(400).json({ error: "缺少 enabled 字段（boolean）" });
+  }
+  const scheduler = getTaskScheduler();
+  const task = scheduler.toggle(req.params.id as string, enabled);
+  if (!task) return res.status(404).json({ error: "任务不存在" });
+  res.json({ task });
+});
+
+/** POST /:id/trigger — 手动触发 */
+router.post("/:id/trigger", async (req: Request, res: Response) => {
+  const scheduler = getTaskScheduler();
+  const run = await scheduler.trigger(req.params.id as string);
+  if (!run) return res.status(404).json({ error: "任务不存在" });
+  res.json({ run });
+});
+
+/** GET /runs — 查询所有执行日志 */
+router.get("/runs", (req: Request, res: Response) => {
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const scheduler = getTaskScheduler();
+  const runs = scheduler.getRuns(undefined, limit);
+  res.json({ runs });
+});
+
+/** GET /:id/runs — 查询指定任务执行日志 */
+router.get("/:id/runs", (req: Request, res: Response) => {
+  const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const scheduler = getTaskScheduler();
+  const runs = scheduler.getRuns(req.params.id as string, limit);
+  res.json({ runs });
+});
+
+export default router;

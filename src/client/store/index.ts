@@ -2,7 +2,7 @@
  * Zustand 全局状态管理
  */
 import { create } from "zustand";
-import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel, MainView } from "../types";
+import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel, MainView, LogSubView, Task, TaskRun } from "../types";
 import * as api from "../lib/client";
 
 interface AppState {
@@ -21,6 +21,25 @@ interface AppState {
   setCurrentView: (view: MainView) => void;
   sessionsExpanded: boolean;
   toggleSessionsExpanded: () => void;
+
+  // 日志子视图
+  logSubView: LogSubView;
+  setLogSubView: (view: LogSubView) => void;
+
+  // 任务状态
+  tasks: Task[];
+  loadingTasks: boolean;
+  loadTasks: () => Promise<void>;
+  createTask: (input: any) => Promise<Task>;
+  updateTask: (id: string, input: any) => Promise<Task>;
+  deleteTask: (id: string) => Promise<void>;
+  toggleTask: (id: string, enabled: boolean) => Promise<void>;
+  triggerTask: (id: string) => Promise<TaskRun>;
+
+  // 任务执行日志
+  taskRuns: TaskRun[];
+  loadingTaskRuns: boolean;
+  loadTaskRuns: (taskId?: string) => Promise<void>;
 
   // 思考等级
   thinkingLevel: ThinkingLevel;
@@ -85,6 +104,61 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCurrentView: (view) => set({ currentView: view }),
   sessionsExpanded: false,
   toggleSessionsExpanded: () => set((s) => ({ sessionsExpanded: !s.sessionsExpanded })),
+
+  // 日志子视图
+  logSubView: "system" as LogSubView,
+  setLogSubView: (view) => set({ logSubView: view }),
+
+  // 任务状态
+  tasks: [],
+  loadingTasks: false,
+  loadTasks: async () => {
+    set({ loadingTasks: true });
+    try {
+      const tasks = await api.fetchTasks();
+      set({ tasks, loadingTasks: false });
+    } catch {
+      set({ loadingTasks: false });
+    }
+  },
+  createTask: async (input) => {
+    const task = await api.createTask(input);
+    set((s) => ({ tasks: [...s.tasks, task] }));
+    return task;
+  },
+  updateTask: async (id, input) => {
+    const task = await api.updateTask(id, input);
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? task : t)) }));
+    return task;
+  },
+  deleteTask: async (id) => {
+    await api.deleteTask(id);
+    set((s) => ({ tasks: s.tasks.filter((t) => t.id !== id) }));
+  },
+  toggleTask: async (id, enabled) => {
+    const task = await api.toggleTask(id, enabled);
+    set((s) => ({ tasks: s.tasks.map((t) => (t.id === id ? task : t)) }));
+  },
+  triggerTask: async (id) => {
+    const run = await api.triggerTask(id);
+    // 刷新任务列表以更新 lastRunAt/runCount
+    const tasks = await api.fetchTasks();
+    set({ tasks });
+    return run;
+  },
+
+  // 任务执行日志
+  taskRuns: [],
+  loadingTaskRuns: false,
+  loadTaskRuns: async (taskId) => {
+    set({ loadingTaskRuns: true });
+    try {
+      const runs = await api.fetchTaskRuns(taskId);
+      set({ taskRuns: runs, loadingTaskRuns: false });
+    } catch {
+      set({ loadingTaskRuns: false });
+    }
+  },
 
   // 思考等级
   thinkingLevel: "medium" as ThinkingLevel,

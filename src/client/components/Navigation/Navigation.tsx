@@ -1,16 +1,18 @@
 /**
  * 左侧导航栏
- * 新建对话 → 分割线 → 首页 / 会话(可折叠子菜单) / 日志 → 版本号
+ * 新建对话 → 首页 / 会话(可折叠) / 定时任务 / 日志(子菜单: 系统日志+任务日志) → 版本号
  */
 import { useState } from "react";
 import { useAppStore } from "../../store";
-import type { MainView } from "../../types";
+import type { MainView, LogSubView } from "../../types";
 import { SessionSubMenu } from "./SessionSubMenu";
 
 export function Navigation() {
   const {
     currentView,
     setCurrentView,
+    logSubView,
+    setLogSubView,
     sessionsExpanded,
     toggleSessionsExpanded,
     createSession,
@@ -21,6 +23,8 @@ export function Navigation() {
   // 批量删除状态
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // 日志折叠状态
+  const [logsExpanded, setLogsExpanded] = useState(false);
 
   const handleCreate = async () => {
     await createSession("新对话");
@@ -46,6 +50,11 @@ export function Navigation() {
     if (!confirm(`确定删除 ${selectedIds.size} 个对话？`)) return;
     await deleteSessions(Array.from(selectedIds));
     exitBatchMode();
+  };
+
+  const handleLogClick = (sub: LogSubView) => {
+    setLogSubView(sub);
+    setCurrentView("logs");
   };
 
   return (
@@ -83,7 +92,6 @@ export function Navigation() {
                 : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
             }`}
           >
-            {/* 点击展开/折叠 */}
             <span
               className="flex items-center gap-2.5 flex-1 cursor-pointer"
               onClick={toggleSessionsExpanded}
@@ -92,10 +100,8 @@ export function Navigation() {
               <span>会话</span>
             </span>
 
-            {/* 右侧操作区：批量模式 → 操作栏；普通模式 → 🗑 icon + 箭头 */}
             <span className="flex items-center gap-1.5 shrink-0">
               {selectMode ? (
-                /* 批量模式操作栏 */
                 <>
                   <button
                     onClick={exitBatchMode}
@@ -119,7 +125,6 @@ export function Navigation() {
                   </button>
                 </>
               ) : (
-                /* 普通模式：🗑 icon（仅展开时 hover 可见） */
                 sessionsExpanded && sessions.length > 0 && (
                   <button
                     onClick={enterBatchMode}
@@ -131,7 +136,6 @@ export function Navigation() {
                 )
               )}
 
-              {/* 展开/折叠箭头 */}
               <span
                 className={`text-xs transition-transform duration-200 cursor-pointer ${
                   sessionsExpanded ? "rotate-0" : "-rotate-90"
@@ -143,7 +147,6 @@ export function Navigation() {
             </span>
           </div>
 
-          {/* 会话子菜单 */}
           {sessionsExpanded && (
             <SessionSubMenu
               selectMode={selectMode}
@@ -153,13 +156,53 @@ export function Navigation() {
           )}
         </div>
 
-        {/* 日志 */}
+        {/* 定时任务 */}
         <NavItem
-          icon="📋"
-          label="日志"
-          active={currentView === "logs"}
-          onClick={() => setCurrentView("logs")}
+          icon="⏰"
+          label="定时任务"
+          active={currentView === "tasks"}
+          onClick={() => setCurrentView("tasks")}
         />
+
+        {/* 日志 — 可折叠子菜单 */}
+        <div>
+          <button
+            onClick={() => setLogsExpanded(!logsExpanded)}
+            className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm transition-all duration-150 ${
+              currentView === "logs"
+                ? "bg-neutral-800 text-white"
+                : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
+            }`}
+          >
+            <span className="text-sm shrink-0">📋</span>
+            <span className="flex-1 text-left">日志</span>
+            <span
+              className={`text-xs transition-transform duration-200 ${
+                logsExpanded ? "rotate-0" : "-rotate-90"
+              }`}
+            >
+              ▾
+            </span>
+          </button>
+
+          {/* 日志子菜单 */}
+          {logsExpanded && (
+            <div className="ml-4 mt-1.5 pl-3 border-l-2 border-neutral-800 space-y-0.5">
+              <LogSubItem
+                icon="📊"
+                label="系统日志"
+                active={currentView === "logs" && logSubView === "system"}
+                onClick={() => handleLogClick("system")}
+              />
+              <LogSubItem
+                icon="📝"
+                label="任务日志"
+                active={currentView === "logs" && logSubView === "task-runs"}
+                onClick={() => handleLogClick("task-runs")}
+              />
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* 底部版本号 */}
@@ -192,6 +235,33 @@ function NavItem({
       }`}
     >
       <span className="text-sm shrink-0">{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+/** 日志子菜单项 */
+function LogSubItem({
+  icon,
+  label,
+  active,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] transition-all duration-150 ${
+        active
+          ? "bg-neutral-800/80 text-white"
+          : "text-neutral-500 hover:bg-neutral-800/40 hover:text-neutral-300"
+      }`}
+    >
+      <span className="text-xs shrink-0">{icon}</span>
       <span>{label}</span>
     </button>
   );

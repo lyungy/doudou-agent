@@ -8,11 +8,13 @@ import { loadConfig } from "./services/config.js";
 import { initStorage } from "./services/session.js";
 import { initLogger, getLogger } from "./services/logger.js";
 import { initLLMTracker } from "./services/llm-tracker.js";
+import { initTaskScheduler } from "./services/task-scheduler.js";
 import { requestLogger } from "./middleware/request-logger.js";
 import configRouter from "./routes/config.js";
 import sessionRouter from "./routes/session.js";
 import chatRouter from "./routes/chat.js";
 import logsRouter from "./routes/logs.js";
+import tasksRouter from "./routes/tasks.js";
 
 // 加载配置
 const config = loadConfig(resolve(process.cwd(), "config.yaml"));
@@ -30,6 +32,9 @@ initLogger({
 
 // 初始化 LLM 追踪器（持久化到日志目录）
 initLLMTracker(resolve(logDir, "llm-requests.jsonl"));
+
+// 初始化定时任务调度器
+initTaskScheduler(resolve(process.cwd(), "data"));
 
 // 初始化存储
 initStorage();
@@ -57,6 +62,7 @@ app.use("/api/config", configRouter);
 app.use("/api/sessions", sessionRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/logs", logsRouter);
+app.use("/api/tasks", tasksRouter);
 
 // 健康检查
 app.get("/api/health", (req, res) => {

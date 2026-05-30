@@ -41,7 +41,10 @@ export interface ModelDef {
 }
 
 /** 视图类型 */
-export type MainView = "home" | "chat" | "logs";
+export type MainView = "home" | "chat" | "tasks" | "logs";
+
+/** 日志子视图 */
+export type LogSubView = "system" | "task-runs";
 
 /** 思考等级 */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -131,3 +134,39 @@ export type SSEEventType =
   | "done"
   | "error"
   | "heartbeat";
+
+/** 任务类型 */
+export type TaskType = "once" | "recurring";
+
+/** 执行状态 */
+export type RunStatus = "running" | "success" | "failed" | "timeout";
+
+/** 定时任务 */
+export interface Task {
+  id: string;
+  name: string;
+  prompt: string;
+  cron: string;
+  type: TaskType;
+  enabled: boolean;
+  timeout: number;
+  modelId?: string;
+  createdAt: string;
+  lastRunAt?: string;
+  nextRunAt?: string;
+  runCount: number;
+}
+
+/** 任务执行记录 */
+export interface TaskRun {
+  id: string;
+  taskId: string;
+  taskName: string;
+  sessionId: string;
+  status: RunStatus;
+  startedAt: string;
+  finishedAt?: string;
+  duration?: number;
+  error?: string;
+  output?: string;
+}

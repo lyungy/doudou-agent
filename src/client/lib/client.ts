@@ -1,7 +1,7 @@
 /**
  * API 请求封装
  */
-import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel } from "../types";
+import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel, Task, TaskRun } from "../types";
 
 const BASE = "/api";
 
@@ -216,4 +216,63 @@ export async function fetchLLMRequests(sessionId?: string, limit = 50): Promise<
   if (sessionId) params.set("sessionId", sessionId);
   params.set("limit", String(limit));
   return request(`/logs/llm-requests?${params.toString()}`);
+}
+
+// ============ Tasks API ============
+
+export async function fetchTasks(): Promise<Task[]> {
+  const data = await request<{ tasks: Task[] }>('/tasks');
+  return data.tasks;
+}
+
+export async function createTask(input: {
+  name: string;
+  prompt: string;
+  cron: string;
+  type: string;
+  enabled?: boolean;
+  timeout?: number;
+  modelId?: string;
+}): Promise<Task> {
+  const data = await request<{ task: Task }>('/tasks', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return data.task;
+}
+
+export async function updateTask(id: string, input: Partial<typeof createTask extends (...args: infer P) => any ? P[0] : never>): Promise<Task> {
+  const data = await request<{ task: Task }>(`/tasks/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  return data.task;
+}
+
+export async function deleteTask(id: string): Promise<void> {
+  await request(`/tasks/${id}`, { method: 'DELETE' });
+}
+
+export async function toggleTask(id: string, enabled: boolean): Promise<Task> {
+  const data = await request<{ task: Task }>(`/tasks/${id}/toggle`, {
+    method: 'POST',
+    body: JSON.stringify({ enabled }),
+  });
+  return data.task;
+}
+
+export async function triggerTask(id: string): Promise<TaskRun> {
+  const data = await request<{ run: TaskRun }>(`/tasks/${id}/trigger`, {
+    method: 'POST',
+  });
+  return data.run;
+}
+
+export async function fetchTaskRuns(taskId?: string, limit = 50): Promise<TaskRun[]> {
+  const params = new URLSearchParams();
+  if (taskId) params.set('taskId', taskId);
+  params.set('limit', String(limit));
+  const url = taskId ? `/tasks/${taskId}/runs?limit=${limit}` : `/tasks/runs?limit=${limit}`;
+  const data = await request<{ runs: TaskRun[] }>(url);
+  return data.runs;
 }

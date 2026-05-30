@@ -10,9 +10,11 @@ import { InputBox } from "./components/Chat/InputBox";
 import { ModelSelector } from "./components/Config/ModelSelector";
 import { LLMStatusBar } from "./components/Chat/LLMStatusBar";
 import { LogPanel } from "./components/Logs/LogPanel";
+import { TaskPanel } from "./components/Tasks/TaskPanel";
+import { TaskLogList } from "./components/Tasks/TaskLogList";
 
 export default function App() {
-  const { currentView, currentSessionId } = useAppStore();
+  const { currentView, currentSessionId, logSubView } = useAppStore();
 
   return (
     <div className="flex h-screen bg-neutral-50">
@@ -39,7 +41,11 @@ export default function App() {
           )
         )}
 
-        {currentView === "logs" && <LogPanel />}
+        {currentView === "tasks" && <TaskPanel />}
+
+        {currentView === "logs" && (
+          logSubView === "task-runs" ? <TaskLogList /> : <LogPanel />
+        )}
       </div>
     </div>
   );
@@ -56,8 +62,8 @@ function TopBar() {
         <span className="font-semibold text-neutral-800">Doudou Agent</span>
       </div>
 
-      {/* 非日志视图显示模型选择器 */}
-      {currentView !== "logs" && <ModelSelector />}
+      {/* 仅对话视图显示模型选择器 */}
+      {currentView === "chat" && <ModelSelector />}
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { resolve } from "path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { getConfig } from "./config.js";
+import { getConfig, getModelById } from "./config.js";
 import { getLogger } from "./logger.js";
 import { tools } from "../tools/index.js";
 
@@ -29,6 +29,15 @@ function loadSystemPrompt(): string {
 
 /** 活跃的 Agent 实例映射（sessionId → Agent） */
 const agents = new Map<string, Agent>();
+
+/**
+ * 供任务调度器使用：创建独立 Agent 并执行
+ * 不缓存实例，执行完后由调用方决定是否清理
+ */
+export function getAgent(sessionId: string, modelId?: string): Agent {
+  const model = getModelById(modelId);
+  return getOrCreateAgent(sessionId, model);
+}
 
 /**
  * 获取或创建 Agent 实例
