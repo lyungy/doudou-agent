@@ -40,6 +40,9 @@ export interface ModelDef {
   maxTokens?: number;
 }
 
+/** 视图类型 */
+export type MainView = "home" | "chat" | "logs";
+
 /** 思考等级 */
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 

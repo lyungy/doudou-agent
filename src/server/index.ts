@@ -7,6 +7,7 @@ import { resolve, isAbsolute } from "path";
 import { loadConfig } from "./services/config.js";
 import { initStorage } from "./services/session.js";
 import { initLogger, getLogger } from "./services/logger.js";
+import { initLLMTracker } from "./services/llm-tracker.js";
 import { requestLogger } from "./middleware/request-logger.js";
 import configRouter from "./routes/config.js";
 import sessionRouter from "./routes/session.js";
@@ -26,6 +27,9 @@ initLogger({
   dir: logDir,
   maxDays: config.logging.max_days,
 });
+
+// 初始化 LLM 追踪器（持久化到日志目录）
+initLLMTracker(resolve(logDir, "llm-requests.jsonl"));
 
 // 初始化存储
 initStorage();

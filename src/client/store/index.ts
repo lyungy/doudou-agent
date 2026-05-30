@@ -2,7 +2,7 @@
  * Zustand 全局状态管理
  */
 import { create } from "zustand";
-import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel } from "../types";
+import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel, MainView } from "../types";
 import * as api from "../lib/client";
 
 interface AppState {
@@ -15,6 +15,12 @@ interface AppState {
   sessions: SessionMeta[];
   currentSessionId: string | null;
   loadingSessions: boolean;
+
+  // 视图状态
+  currentView: MainView;
+  setCurrentView: (view: MainView) => void;
+  sessionsExpanded: boolean;
+  toggleSessionsExpanded: () => void;
 
   // 思考等级
   thinkingLevel: ThinkingLevel;
@@ -73,6 +79,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   messages: [],
   isStreaming: false,
   streamingMessageId: null,
+
+  // 视图状态
+  currentView: "home" as MainView,
+  setCurrentView: (view) => set({ currentView: view }),
+  sessionsExpanded: false,
+  toggleSessionsExpanded: () => set((s) => ({ sessionsExpanded: !s.sessionsExpanded })),
 
   // 思考等级
   thinkingLevel: "medium" as ThinkingLevel,
@@ -145,6 +157,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       sessions: [session, ...state.sessions],
       currentSessionId: session.id,
+      currentView: "chat" as MainView,
+      sessionsExpanded: true,
       messages: [],
     }));
     return session;
@@ -154,6 +168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const session = get().sessions.find((s) => s.id === id);
     set({
       currentSessionId: id,
+      currentView: "chat" as MainView,
       messages: [],
       currentModelId: session?.modelId || get().currentModelId,
     });

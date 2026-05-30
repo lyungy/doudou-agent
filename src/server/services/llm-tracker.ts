@@ -3,8 +3,10 @@
  *
  * 状态机：connecting → streaming → completed / error / aborted
  * 记录：TTFT（首 token 耗时）、总耗时、token 用量
- * 存储：内存环形缓冲区（500 条），不持久化（日志文件已兜底）
+ * 存储：内存环形缓冲区（500 条）+ JSONL 文件持久化
  */
+import { mkdirSync, appendFileSync, readFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
 import { getLogger } from "./logger.js";
 
 /** LLM 请求状态 */
@@ -26,7 +28,7 @@ export interface LLMRequestRecord {
   error?: string;
 }
 
-/** 缓冲区大小 */
+/** 内存缓冲区大小 */
 const BUFFER_SIZE = 500;
 
 class LLMTracker {
@@ -34,6 +36,15 @@ class LLMTracker {
   private completed: LLMRequestRecord[] = [];
   private completedIndex = 0;
   private idCounter = 0;
+  private persistPath: string;
+
+  constructor(persistPath?: string) {
+    this.persistPath = persistPath || join(process.cwd(), "logs", "llm-requests.jsonl");
+    // 确保目录存在
+    mkdirSync(dirname(this.persistPath), { recursive: true });
+    // 启动时加载历史记录
+    this.loadFromDisk();
+  }
 
   /**
    * 记录请求发起
@@ -148,19 +159,30 @@ class LLMTracker {
   }
 
   /**
-   * 获取最近的完成记录
+   * 获取最近的完成记录（内存 + 磁盘历史合并，按时间倒序）
    */
   getRecent(limit = 50): LLMRequestRecord[] {
-    const entries = this.getCompletedEntries();
-    return entries.slice(0, limit);
+    const memoryEntries = this.getCompletedEntries();
+    const diskEntries = this.loadFromDisk();
+    // 合并去重（内存优先，因为内存是最新的）
+    const seen = new Set(memoryEntries.map((r) => r.id));
+    const merged = [...memoryEntries];
+    for (const r of diskEntries) {
+      if (!seen.has(r.id)) {
+        merged.push(r);
+        seen.add(r.id);
+      }
+    }
+    // 按 startTime 倒序
+    merged.sort((a, b) => b.startTime - a.startTime);
+    return merged.slice(0, limit);
   }
 
   /**
    * 获取指定 session 的记录
    */
   getBySession(sessionId: string, limit = 50): LLMRequestRecord[] {
-    const entries = this.getCompletedEntries();
-    return entries.filter((r) => r.sessionId === sessionId).slice(0, limit);
+    return this.getRecent(1000).filter((r) => r.sessionId === sessionId).slice(0, limit);
   }
 
   /**
@@ -181,6 +203,9 @@ class LLMTracker {
       this.completed[this.completedIndex] = record;
     }
     this.completedIndex = (this.completedIndex + 1) % BUFFER_SIZE;
+
+    // 持久化到磁盘
+    this.appendToDisk(record);
   }
 
   private getCompletedEntries(): LLMRequestRecord[] {
@@ -192,13 +217,64 @@ class LLMTracker {
       ...this.completed.slice(0, this.completedIndex).reverse(),
     ];
   }
+
+  /**
+   * 追加写入 JSONL 文件
+   */
+  private appendToDisk(record: LLMRequestRecord): void {
+    try {
+      const line = JSON.stringify(record) + "\n";
+      appendFileSync(this.persistPath, line, "utf-8");
+    } catch {
+      // 写入失败不影响主流程
+    }
+  }
+
+  /**
+   * 从 JSONL 文件加载历史记录
+   */
+  private loadFromDisk(): LLMRequestRecord[] {
+    try {
+      if (!existsSync(this.persistPath)) return [];
+      const content = readFileSync(this.persistPath, "utf-8");
+      const lines = content.trim().split("\n").filter(Boolean);
+      const records: LLMRequestRecord[] = [];
+      for (const line of lines) {
+        try {
+          const entry = JSON.parse(line) as LLMRequestRecord;
+          if (entry.id && entry.sessionId && entry.startTime) {
+            records.push(entry);
+          }
+        } catch {
+          // 跳过解析失败的行
+        }
+      }
+      return records;
+    } catch {
+      return [];
+    }
+  }
 }
 
 // ============ 单例 ============
 
-const tracker = new LLMTracker();
+let tracker: LLMTracker | null = null;
 
+/**
+ * 初始化 LLMTracker（启动时调用一次）
+ */
+export function initLLMTracker(persistPath?: string): LLMTracker {
+  tracker = new LLMTracker(persistPath);
+  return tracker;
+}
+
+/**
+ * 获取 LLMTracker 实例
+ */
 export function getLLMTracker(): LLMTracker {
+  if (!tracker) {
+    tracker = new LLMTracker();
+  }
   return tracker;
 }
 
