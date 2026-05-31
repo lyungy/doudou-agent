@@ -42,8 +42,9 @@ class LLMTracker {
     this.persistPath = persistPath || join(process.cwd(), "logs", "llm-requests.jsonl");
     // 确保目录存在
     mkdirSync(dirname(this.persistPath), { recursive: true });
-    // 启动时加载历史记录
+    // 启动时加载历史记录并恢复 idCounter
     this.loadFromDisk();
+    this.idCounter = this.findMaxId();
   }
 
   /**
@@ -231,6 +232,24 @@ class LLMTracker {
   }
 
   /**
+   * 从已有记录中找到最大 ID 数字，避免重启后 ID 重用
+   */
+  private findMaxId(): number {
+    let max = 0;
+    const extractNum = (id: string) => {
+      const match = id.match(/\d+/);
+      return match ? parseInt(match[0], 10) : 0;
+    };
+    for (const r of this.completed) {
+      max = Math.max(max, extractNum(r.id));
+    }
+    for (const r of this.records.values()) {
+      max = Math.max(max, extractNum(r.id));
+    }
+    return max;
+  }
+
+  /**
    * 从 JSONL 文件加载历史记录
    */
   private loadFromDisk(): LLMRequestRecord[] {
@@ -249,6 +268,10 @@ class LLMTracker {
           // 跳过解析失败的行
         }
       }
+      // 写入 completed 缓存供 getCompletedEntries 使用
+      // 只取最后 BUFFER_SIZE 条
+      this.completed = records.slice(-BUFFER_SIZE);
+      this.completedIndex = this.completed.length % BUFFER_SIZE;
       return records;
     } catch {
       return [];
