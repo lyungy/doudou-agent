@@ -18,6 +18,8 @@
 - ⏰ **定时任务** — Cron 调度 + LLM 驱动执行，支持一次性/循环任务、超时控制
 - 📋 **结构化日志** — 系统日志 + LLM 请求追踪 + 任务执行日志，按天滚动
 - 📝 **Markdown 渲染** — AI 回复支持完整 Markdown 渲染 + 代码块一键复制
+- 🖥️ **CLI 工具** — 终端直连 LLM 对话、服务管理、Session/任务/配置管理
+- 🍎 **macOS 服务化** — launchd plist 一键安装，开机自启、进程守护
 - ⚡ **开箱即用** — 配置文件写好 API Key 即可运行
 
 ## 📸 界面预览
@@ -100,7 +102,43 @@ npm run dev:client   # 前端 http://localhost:5173
 
 打开浏览器访问 `http://localhost:5173`，开始对话。
 
-### 4. 生产构建
+### 4. CLI 命令行
+
+```bash
+# 终端直连 LLM 对话（不经 Express，直接调用）
+npx tsx src/cli/index.ts chat "你好"
+npx tsx src/cli/index.ts chat              # 交互模式
+
+# 查看统计
+nnpx tsx src/cli/index.ts stats
+
+# Session 管理
+nnpx tsx src/cli/index.ts session list
+
+# 定时任务
+nnpx tsx src/cli/index.ts cron list
+
+# 配置查看
+nnpx tsx src/cli/index.ts config show
+```
+
+### 5. macOS 服务化部署
+
+```bash
+# 安装为系统服务（launchd plist，开机自启）
+npx tsx src/cli/index.ts install
+
+# 查看状态
+nnpx tsx src/cli/index.ts status
+
+# 查看日志
+nnpx tsx src/cli/index.ts logs
+
+# 卸载
+nnpx tsx src/cli/index.ts uninstall
+```
+
+### 6. 生产构建
 
 ```bash
 npm run build
@@ -222,9 +260,11 @@ Agent 内置以下工具，LLM 可自主调用：
 doudou-agent/
 ├── config.yaml                    # LLM 配置文件（不入 git）
 ├── AGENT.md                       # 系统提示词（可自定义）
+├── templates/
+│   └── com.doudou-agent.plist     # macOS launchd plist 模板
 ├── src/
 │   ├── server/                    # 后端
-│   │   ├── index.ts               # Express 入口
+│   │   ├── index.ts               # Express 入口（导出 createApp/startServer）
 │   │   ├── routes/                # API 路由
 │   │   │   ├── chat.ts            #   对话 SSE 流
 │   │   │   ├── session.ts         #   Session CRUD
@@ -240,6 +280,20 @@ doudou-agent/
 │   │   │   └── task-scheduler.ts  #   定时任务调度器
 │   │   ├── tools/                 # 内置工具（6 个）
 │   │   └── middleware/            # 中间件
+│   ├── cli/                       # CLI 命令行工具
+│   │   ├── index.ts               # CLI 入口（commander）
+│   │   ├── commands/              # 命令实现
+│   │   │   ├── service.ts         #   launchd 服务管理
+│   │   │   ├── chat.ts            #   终端对话
+│   │   │   ├── cron.ts            #   定时任务管理
+│   │   │   ├── session.ts         #   Session 管理
+│   │   │   ├── stats.ts           #   统计概览
+│   │   │   └── config.ts          #   配置管理
+│   │   └── lib/                   # 工具函数
+│   │       ├── init.ts            #   CLI 共享初始化
+│   │       ├── chat-runner.ts     #   终端对话核心逻辑
+│   │       ├── format.ts          #   chalk 格式化
+│   │       └── spinner.ts         #   ora 加载动画
 │   └── client/                    # 前端
 │       ├── App.tsx                # 主界面
 │       ├── components/
@@ -317,6 +371,44 @@ doudou-agent/
 5. 「定时任务」支持 Cron 调度，可设置超时时间
 6. 「日志」子菜单分为系统日志和任务日志，支持按级别/模块过滤
 
+## 🖥️ CLI 命令参考
+
+```bash
+# 服务管理（macOS launchd）
+doudou install [--port N]         # 安装为系统服务
+doudou uninstall                  # 卸载服务
+doudou status                     # 查看状态
+doudou logs [--lines N]           # 查看日志
+doudou serve [--port N]           # 启动 HTTP 服务
+
+# 终端对话（直连 LLM，不经 Express）
+doudou chat                       # 交互模式
+doudou chat "你好"                # 单次对话
+doudou chat --session <id>        # 恢复已有 session
+doudou chat --model <id>          # 指定模型
+
+# 定时任务
+doudou cron list                  # 列出任务
+doudou cron add '<json>'          # 创建任务
+doudou cron remove <id>           # 删除任务
+doudou cron trigger <id>          # 手动触发
+doudou cron enable <id>           # 启用任务
+doudou cron disable <id>          # 禁用任务
+
+# Session 管理
+doudou session list               # 列出 session
+doudou session create [-t 标题]   # 创建 session
+doudou session delete <id>        # 删除 session
+doudou session export <id>        # 导出消息为 JSON
+
+# 统计
+doudou stats                      # 终端统计概览
+
+# 配置
+doudou config show                # 查看配置（脱敏）
+doudou config set <key> <value>   # 修改配置
+```
+
 ## 🤝 技术栈
 
 | 层 | 技术 |
@@ -324,7 +416,9 @@ doudou-agent/
 | 前端 | React 19 + TypeScript + Vite + Tailwind CSS + Zustand |
 | 后端 | Node.js 20+ + TypeScript + Express |
 | Agent | pi-agent-core + pi-ai |
+| CLI | commander + chalk + ora |
 | 调度 | croner（Cron 表达式调度） |
+| 服务化 | macOS launchd plist |
 | 存储 | JSONL + SQLite |
 | 流式 | Server-Sent Events (SSE) |
 
