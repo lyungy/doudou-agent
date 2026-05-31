@@ -110,16 +110,16 @@ npx tsx src/cli/index.ts chat "你好"
 npx tsx src/cli/index.ts chat              # 交互模式
 
 # 查看统计
-nnpx tsx src/cli/index.ts stats
+npx tsx src/cli/index.ts stats
 
 # Session 管理
-nnpx tsx src/cli/index.ts session list
+npx tsx src/cli/index.ts session list
 
 # 定时任务
-nnpx tsx src/cli/index.ts cron list
+npx tsx src/cli/index.ts cron list
 
 # 配置查看
-nnpx tsx src/cli/index.ts config show
+npx tsx src/cli/index.ts config show
 ```
 
 ### 5. macOS 服务化部署
@@ -129,13 +129,13 @@ nnpx tsx src/cli/index.ts config show
 npx tsx src/cli/index.ts install
 
 # 查看状态
-nnpx tsx src/cli/index.ts status
+npx tsx src/cli/index.ts status
 
 # 查看日志
-nnpx tsx src/cli/index.ts logs
+npx tsx src/cli/index.ts logs
 
 # 卸载
-nnpx tsx src/cli/index.ts uninstall
+npx tsx src/cli/index.ts uninstall
 ```
 
 ### 6. 生产构建
