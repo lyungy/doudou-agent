@@ -40,6 +40,22 @@ export interface ModelDef {
   maxTokens?: number;
 }
 
+/** 图片内容（多模态） */
+export interface ImageContent {
+  type: "image";
+  data: string;        // base64
+  mimeType: string;    // "image/png" | "image/jpeg"
+}
+
+/** 待发送的图片（含预览用本地 URL） */
+export interface PendingImage {
+  id: string;
+  file: File;
+  previewUrl: string;   // 本地 blob URL，用于预览
+  base64: string;       // 纯 base64（不含 data: 前缀）
+  mimeType: string;
+}
+
 /** 视图类型 */
 export type MainView = "home" | "chat" | "tasks" | "logs";
 
@@ -59,6 +75,7 @@ export interface ChatMessage {
   content: string;
   thinking?: string;
   toolCalls?: ToolCallInfo[];
+  images?: ImageContent[];  // 多模态图片
   timestamp: number;
 }
 

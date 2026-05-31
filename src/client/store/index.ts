@@ -70,7 +70,7 @@ interface AppState {
   deleteSession: (id: string) => Promise<void>;
   deleteSessions: (ids: string[]) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
-  sendMessage: (content: string) => Promise<void>;
+  sendMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>;
   abortChat: () => void;
 
   // 内部方法
@@ -309,13 +309,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ============ 对话 ============
 
-  sendMessage: async (content: string) => {
+  sendMessage: async (content: string, images?: Array<{ data: string; mimeType: string }>) => {
     const { currentSessionId } = get();
-    if (!currentSessionId || !content.trim()) return;
+    if (!currentSessionId || (!content.trim() && (!images || images.length === 0))) return;
 
     let sessionId = currentSessionId;
     if (!sessionId) {
-      const session = await get().createSession(content.slice(0, 30));
+      const title = content.trim() ? content.slice(0, 30) : "图片对话";
+      const session = await get().createSession(title);
       sessionId = session.id;
     }
 
@@ -323,6 +324,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       id: `user-${Date.now()}`,
       type: "user",
       content: content.trim(),
+      images: images?.map((img) => ({ type: "image" as const, data: img.data, mimeType: img.mimeType })),
       timestamp: Date.now(),
     };
 
@@ -386,7 +388,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });
         },
-      }, abortController.signal, modelId || undefined, thinkingLevel);
+      }, abortController.signal, modelId || undefined, thinkingLevel, images);
     } catch (err: any) {
       if (err.name !== "AbortError") {
         get()._commitAssistantMessage();

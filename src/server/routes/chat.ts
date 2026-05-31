@@ -17,7 +17,7 @@ const router = Router();
  * POST /api/chat/stream — SSE 流式对话
  */
 router.post("/stream", async (req: Request, res: Response) => {
-  const { sessionId, message, modelId, thinkingLevel } = req.body;
+  const { sessionId, message, modelId, thinkingLevel, images } = req.body;
   const logger = getLogger();
   const tracker = getLLMTracker();
 
@@ -166,7 +166,18 @@ router.post("/stream", async (req: Request, res: Response) => {
       }
     });
 
-    await agent.prompt(message);
+    // 构造图片内容（pi-ai ImageContent 格式）
+    const imageContents = Array.isArray(images)
+      ? images
+          .filter((img: any) => img && img.data && img.mimeType)
+          .map((img: any) => ({
+            type: "image" as const,
+            data: img.data,
+            mimeType: img.mimeType,
+          }))
+      : undefined;
+
+    await agent.prompt(message, imageContents?.length ? imageContents : undefined);
     await agent.waitForIdle();
 
     // 兜底：确保所有 Agent 消息都已持久化（跳过已写的）

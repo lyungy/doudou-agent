@@ -17,9 +17,9 @@ export function useChat() {
   } = useAppStore();
 
   const send = useCallback(
-    async (content: string) => {
+    async (content: string, images?: Array<{ data: string; mimeType: string }>) => {
       if (isStreaming) return;
-      await sendMessage(content);
+      await sendMessage(content, images);
     },
     [isStreaming, sendMessage]
   );

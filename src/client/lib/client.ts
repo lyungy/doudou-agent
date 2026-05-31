@@ -105,12 +105,13 @@ export async function streamChat(
   callbacks: ChatStreamCallbacks,
   signal?: AbortSignal,
   modelId?: string,
-  thinkingLevel?: ThinkingLevel
+  thinkingLevel?: ThinkingLevel,
+  images?: Array<{ data: string; mimeType: string }>
 ): Promise<void> {
   const response = await fetch(`${BASE}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel }),
+    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel, images }),
     signal,
   });
 

@@ -1,10 +1,46 @@
 /**
  * 消息气泡组件
  */
+import { useState } from "react";
 import type { ChatMessage } from "../../types";
 import { ToolCallCard } from "./ToolCallCard";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+
+/** 图片点击放大模态框 */
+function ImageWithModal({ src }: { src: string }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <img
+        src={src}
+        alt="图片"
+        className="max-w-[200px] max-h-[200px] rounded-lg border border-neutral-200 cursor-pointer hover:opacity-80 transition-opacity object-cover"
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-8"
+          onClick={() => setOpen(false)}
+        >
+          <img
+            src={src}
+            alt="图片"
+            className="max-w-full max-h-full rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setOpen(false)}
+            className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/40 text-white rounded-full flex items-center justify-center text-xl transition-colors"
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
 
 interface Props {
   message: ChatMessage;
@@ -58,6 +94,18 @@ export function MessageBubble({ message, isStreaming }: Props) {
             {isStreaming && (
               <span className="inline-block w-[3px] h-4 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full ml-0.5 align-text-bottom animate-pulse" />
             )}
+          </div>
+        )}
+
+        {/* 多模态图片 */}
+        {message.images && message.images.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {message.images.map((img, idx) => {
+              const src = `data:${img.mimeType};base64,${img.data}`;
+              return (
+                <ImageWithModal key={idx} src={src} />
+              );
+            })}
           </div>
         )}
 

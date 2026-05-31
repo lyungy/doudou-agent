@@ -54,7 +54,7 @@ export function createApp(config: AppConfig): express.Express {
 
   // 创建 Express 应用
   const app = express();
-  app.use(express.json({ limit: "10mb" }));
+  app.use(express.json({ limit: "20mb" }));
 
   // CORS
   app.use((req, res, next) => {
