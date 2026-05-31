@@ -8,12 +8,17 @@
     "dev:server": "tsx watch src/server/index.ts",
     "dev:client": "vite --config src/client/vite.config.ts",
     "build": "tsc && vite build --config src/client/vite.config.ts",
+    "build:server": "tsc -p tsconfig.server.json",
+    "build:cli": "tsc -p tsconfig.cli.json",
     "test": "vitest",
     "test:run": "vitest run"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "bin": {
+    "doudou": "./dist/cli/index.js"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -21,10 +26,13 @@
     "@earendil-works/pi-agent-core": "^0.76.0",
     "@earendil-works/pi-ai": "^0.76.0",
     "better-sqlite3": "^12.10.0",
+    "chalk": "^5.6.2",
+    "commander": "^15.0.0",
     "croner": "^10.0.1",
     "express": "^5.2.1",
     "highlight.js": "^11.11.1",
     "js-yaml": "^4.1.1",
+    "ora": "^9.4.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-markdown": "^10.1.0",
