@@ -34,19 +34,19 @@ const agents = new Map<string, Agent>();
  * 供任务调度器使用：创建独立 Agent 并执行
  * 不缓存实例，执行完后由调用方决定是否清理
  */
-export function getAgent(sessionId: string, modelId?: string): Agent {
+export async function getAgent(sessionId: string, modelId?: string): Promise<Agent> {
   const model = getModelById(modelId);
   return getOrCreateAgent(sessionId, model);
 }
 
 /**
- * 获取或创建 Agent 实例
+ * 获取或创建 Agent 实例（异步：首次创建时加载 JSONL 历史消息）
  */
-export function getOrCreateAgent(
+export async function getOrCreateAgent(
   sessionId: string,
   model: Model<any>,
   systemPrompt?: string
-): Agent {
+): Promise<Agent> {
   const existing = agents.get(sessionId);
   if (existing) {
     // 模型热切换：如果模型变了，更新 Agent 的 model
@@ -61,6 +61,21 @@ export function getOrCreateAgent(
 
   getLogger().info("agent", `创建新 Agent，模型: ${model.id}`, { sessionId });
 
+  // 从 JSONL 加载历史消息
+  let historyMessages: any[] = [];
+  try {
+    const { openSession } = await import("./session.js");
+    const session = await openSession(sessionId);
+    if (session) {
+      const context = await session.buildContext();
+      historyMessages = context.messages || [];
+      if (historyMessages.length > 0) {
+        getLogger().info("agent", `从 JSONL 加载 ${historyMessages.length} 条历史消息`, { sessionId });
+      }
+    }
+  } catch (err: any) {
+    getLogger().warn("agent", `加载历史消息失败: ${err.message}`, { sessionId });
+  }
 
   const config = getConfig();
 
@@ -78,6 +93,7 @@ export function getOrCreateAgent(
       model,
       tools: tools as any,
       thinkingLevel,
+      messages: historyMessages,
     },
     // 动态获取 apiKey：模型切换时 key 也要跟着变
     getApiKey: (): string => getApiKeyByModelId(agent.state.model?.id),

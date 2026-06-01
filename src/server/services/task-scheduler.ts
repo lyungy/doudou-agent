@@ -247,7 +247,7 @@ class TaskScheduler {
     try {
       // 创建 Agent 并执行
       const model = getModelById(task.modelId);
-      const agent = getOrCreateAgent(sessionId, model);
+      const agent = await getOrCreateAgent(sessionId, model);
 
       // 超时控制
       const timeoutMs = (task.timeout || 300) * 1000;
