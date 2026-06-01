@@ -21,8 +21,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 // ============ Session API ============
 
-export async function fetchSessions(): Promise<SessionMeta[]> {
-  return request("/sessions");
+export async function fetchSessions(q?: string, content?: boolean): Promise<SessionMeta[]> {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (content) params.set("content", "true");
+  const qs = params.toString();
+  return request(`/sessions${qs ? `?${qs}` : ""}`);
 }
 
 export async function createSession(title?: string, modelId?: string): Promise<SessionMeta> {
@@ -58,6 +62,13 @@ export async function updateSessionTitle(id: string, title: string): Promise<voi
   await request(`/sessions/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
+  });
+}
+
+export async function toggleSessionPin(id: string, pinned: boolean): Promise<void> {
+  await request(`/sessions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ pinned: pinned ? 1 : 0 }),
   });
 }
 

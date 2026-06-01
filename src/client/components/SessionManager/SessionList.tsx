@@ -1,25 +1,37 @@
 /**
  * 会话管理页
- * 搜索 + 筛选 + 卡片列表 + 批量删除
+ * 搜索（标题/内容）+ 筛选 + 排序 + 卡片列表 + 批量删除
  */
 import { useEffect, useState, useMemo } from "react";
 import { useAppStore } from "../../store";
 import { SessionItem } from "./SessionItem";
+import { ConfirmModal } from "../common/ConfirmModal";
 
 type TimeFilter = "all" | "today" | "week" | "month";
+type SortKey = "updated" | "created" | "messages";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "updated", label: "最近活跃" },
+  { key: "created", label: "创建时间" },
+  { key: "messages", label: "消息数量" },
+];
 
 export function SessionList() {
   const {
     sessions,
     currentSessionId,
     loadingSessions,
+    models,
     loadSessions,
     selectSession,
     deleteSession,
     deleteSessions,
     renameSession,
+    togglePin,
     sessionSearch,
     setSessionSearch,
+    searchContent,
+    setSearchContent,
     sessionFilter,
     setSessionFilter,
   } = useAppStore();
@@ -27,20 +39,25 @@ export function SessionList() {
   // 批量选择模式
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // 排序方式
+  const [sortKey, setSortKey] = useState<SortKey>("updated");
+  // 批量删除确认
+  const [showBatchConfirm, setShowBatchConfirm] = useState(false);
 
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
 
-  // 筛选逻辑
+  // 内容搜索模式下，搜索词变化时防抖重新加载
+  useEffect(() => {
+    if (!searchContent || !sessionSearch.trim()) return;
+    const timer = setTimeout(() => loadSessions(), 300);
+    return () => clearTimeout(timer);
+  }, [searchContent, sessionSearch]);
+
+  // 筛选 + 排序逻辑
   const filteredSessions = useMemo(() => {
     let result = sessions;
-
-    // 搜索过滤
-    if (sessionSearch.trim()) {
-      const q = sessionSearch.trim().toLowerCase();
-      result = result.filter((s) => s.title.toLowerCase().includes(q));
-    }
 
     // 时间过滤
     if (sessionFilter !== "all") {
@@ -65,8 +82,22 @@ export function SessionList() {
       result = result.filter((s) => new Date(s.updatedAt) >= cutoff);
     }
 
-    return result;
-  }, [sessions, sessionSearch, sessionFilter]);
+    // 排序（置顶始终在前，已在后端处理；前端做次级排序）
+    const sorted = [...result];
+    switch (sortKey) {
+      case "updated":
+        sorted.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        break;
+      case "created":
+        sorted.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        break;
+      case "messages":
+        sorted.sort((a, b) => b.messageCount - a.messageCount);
+        break;
+    }
+
+    return sorted;
+  }, [sessions, sessionFilter, sortKey]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -87,10 +118,10 @@ export function SessionList() {
 
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
-    if (!confirm(`确定删除 ${selectedIds.size} 个对话？`)) return;
     await deleteSessions(Array.from(selectedIds));
     setSelectMode(false);
     setSelectedIds(new Set());
+    setShowBatchConfirm(false);
   };
 
   const exitSelectMode = () => {
@@ -128,7 +159,7 @@ export function SessionList() {
                   {selectedIds.size === filteredSessions.length ? "取消全选" : "全选"}
                 </button>
                 <button
-                  onClick={handleBatchDelete}
+                  onClick={() => setShowBatchConfirm(true)}
                   disabled={selectedIds.size === 0}
                   className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -147,26 +178,40 @@ export function SessionList() {
           </div>
         </div>
 
-        {/* 搜索 + 筛选 */}
+        {/* 搜索 + 内容搜索 toggle + 时间筛选 + 排序 */}
         <div className="flex items-center gap-3">
-          {/* 搜索框 */}
+          {/* 搜索框 + 内容搜索 toggle */}
           <div className="flex-1 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">🔍</span>
             <input
               type="text"
               value={sessionSearch}
               onChange={(e) => setSessionSearch(e.target.value)}
-              placeholder="搜索会话标题..."
-              className="w-full pl-9 pr-4 py-2 text-sm bg-neutral-100 border border-neutral-200 rounded-lg outline-none focus:border-blue-400 focus:bg-white transition-all"
+              placeholder={searchContent ? "搜索标题和消息内容..." : "搜索会话标题..."}
+              className="w-full pl-9 pr-20 py-2 text-sm bg-neutral-100 border border-neutral-200 rounded-lg outline-none focus:border-blue-400 focus:bg-white transition-all"
             />
-            {sessionSearch && (
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {sessionSearch && (
+                <button
+                  onClick={() => setSessionSearch("")}
+                  className="text-neutral-400 hover:text-neutral-600 text-xs px-1"
+                >
+                  ✕
+                </button>
+              )}
+              {/* 内容搜索 toggle */}
               <button
-                onClick={() => setSessionSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 text-xs"
+                onClick={() => setSearchContent(!searchContent)}
+                className={`px-1.5 py-0.5 text-[10px] rounded transition-all ${
+                  searchContent
+                    ? "bg-blue-100 text-blue-600"
+                    : "text-neutral-400 hover:text-neutral-600 hover:bg-neutral-200"
+                }`}
+                title={searchContent ? "当前：搜索标题+内容" : "当前：仅搜索标题"}
               >
-                ✕
+                {searchContent ? "📝" : "📄"}
               </button>
-            )}
+            </div>
           </div>
 
           {/* 时间筛选 */}
@@ -190,6 +235,19 @@ export function SessionList() {
               </button>
             ))}
           </div>
+
+          {/* 排序下拉 */}
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="px-3 py-2 text-xs bg-neutral-100 border border-neutral-200 rounded-lg outline-none focus:border-blue-400 text-neutral-600 cursor-pointer"
+          >
+            {SORT_OPTIONS.map((opt) => (
+              <option key={opt.key} value={opt.key}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -215,9 +273,11 @@ export function SessionList() {
                 isActive={session.id === currentSessionId}
                 selectable={selectMode}
                 selected={selectedIds.has(session.id)}
+                models={models}
                 onSelect={() => handleSelectSession(session.id)}
                 onDelete={() => deleteSession(session.id)}
                 onRename={(title) => renameSession(session.id, title)}
+                onTogglePin={() => togglePin(session.id, !session.pinned)}
               />
             ))}
           </div>
@@ -231,6 +291,17 @@ export function SessionList() {
           {sessionSearch || sessionFilter !== "all" ? `，筛选显示 ${filteredSessions.length} 个` : ""}
         </div>
       )}
+
+      {/* 批量删除确认弹窗 */}
+      <ConfirmModal
+        open={showBatchConfirm}
+        title="批量删除"
+        message={`确定删除选中的 ${selectedIds.size} 个会话？删除后无法恢复。`}
+        confirmText={`删除 ${selectedIds.size} 个`}
+        danger
+        onConfirm={handleBatchDelete}
+        onCancel={() => setShowBatchConfirm(false)}
+      />
     </div>
   );
 }

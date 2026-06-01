@@ -11,16 +11,80 @@ import {
   openSession,
 } from "../services/session.js";
 import { removeAgent } from "../services/agent.js";
+import { readdir, open, stat } from "fs/promises";
+import { resolve } from "path";
+import { getConfig } from "../services/config.js";
 
 const router = Router();
 
 /**
  * GET /api/sessions
  * 获取 session 列表
+ * 查询参数：q（搜索关键词）、content=true（搜消息内容）
  */
-router.get("/", (req, res) => {
+router.get("/", async (req, res) => {
   try {
-    const sessions = listSessions();
+    const q = (req.query.q as string || "").trim().toLowerCase();
+    const searchContent = req.query.content === "true";
+
+    let sessions = await listSessions();
+
+    if (q) {
+      // 标题搜索（始终生效）
+      sessions = sessions.filter((s) => s.title.toLowerCase().includes(q));
+
+      // 消息内容搜索（content=true 时额外搜 JSONL）
+      if (searchContent) {
+        const config = getConfig();
+        const dataDir = config.storage.data_dir;
+        const sessionsDir = resolve(dataDir, "sessions");
+        const matchedIds = new Set(sessions.map((s) => s.id));
+
+        // 遍历所有 JSONL 文件搜索消息内容
+        try {
+          const dirs = await readdir(sessionsDir);
+          // 限制最多搜 200 个 session 目录
+          const dirsToSearch = dirs.slice(0, 200);
+
+          await Promise.all(
+            dirsToSearch.map(async (dir) => {
+              if (matchedIds.has(dir)) return; // 标题已匹配的跳过
+              try {
+                const jsonlPath = resolve(sessionsDir, dir, "session.jsonl");
+                const st = await stat(jsonlPath).catch(() => null);
+                if (!st) return;
+
+                // 超 1MB 只读最后 50KB
+                const readSize = Math.min(st.size, 50 * 1024);
+                const buffer = Buffer.alloc(readSize);
+                const fh = await open(jsonlPath, "r");
+                try {
+                  await fh.read(buffer, 0, readSize, st.size - readSize);
+                } finally {
+                  await fh.close();
+                }
+
+                const text = buffer.toString("utf-8").toLowerCase();
+                if (text.includes(q)) {
+                  // 命中，从数据库查出 session 元数据
+                  const meta = getSession(dir);
+                  if (meta) sessions.push(meta);
+                  matchedIds.add(dir);
+                }
+              } catch {
+                // 单个文件搜索失败不影响其他
+              }
+            })
+          );
+        } catch {
+          // 目录读取失败忽略
+        }
+
+        // 搜索结果限 50 条
+        if (sessions.length > 50) sessions = sessions.slice(0, 50);
+      }
+    }
+
     res.json(sessions);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -68,9 +132,9 @@ router.patch("/:id", (req, res) => {
       return res.status(404).json({ error: "Session 不存在" });
     }
 
-    // 只允许更新 title 和 modelId
-    const { title, modelId } = req.body;
-    updateSession(req.params.id, { title, modelId });
+    // 只允许更新 title、modelId 和 pinned
+    const { title, modelId, pinned } = req.body;
+    updateSession(req.params.id, { title, modelId, pinned });
     const updated = getSession(req.params.id);
     res.json(updated);
   } catch (err: any) {

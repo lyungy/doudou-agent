@@ -4,6 +4,7 @@
  */
 import { mkdirSync, existsSync } from "fs";
 import { resolve, isAbsolute } from "path";
+import { open, stat } from "fs/promises";
 import Database from "better-sqlite3";
 import { JsonlSessionRepo } from "@earendil-works/pi-agent-core";
 import type { Session } from "@earendil-works/pi-agent-core";
@@ -19,6 +20,8 @@ export interface SessionMeta {
   cwd: string;
   jsonlPath: string;
   messageCount: number;
+  pinned: number;
+  lastMessage?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,6 +81,13 @@ export function initStorage(): void {
     // 列已存在，忽略
   }
 
+  // 兼容升级：旧表没有 pinned 列时自动添加
+  try {
+    db.exec(`ALTER TABLE sessions ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0`);
+  } catch {
+    // 列已存在，忽略
+  }
+
   // 初始化 JSONL 仓库
   const fs = new NodeFileSystem(process.cwd());
   jsonlRepo = new JsonlSessionRepo({
@@ -129,6 +139,7 @@ export async function createSession(title?: string, modelId?: string): Promise<S
     cwd: metadata.cwd,
     jsonlPath: metadata.path,
     messageCount: 0,
+    pinned: 0,
     createdAt: metadata.createdAt,
     updatedAt: now,
   };
@@ -145,21 +156,80 @@ export async function createSession(title?: string, modelId?: string): Promise<S
 }
 
 /**
- * 获取 session 列表
+ * 从 JSONL 文件尾部读取最后一条消息摘要（最多读最后 4KB）
+ * 性能优化：不读整个文件，只从末尾 seek 读取
  */
-export function listSessions(): SessionMeta[] {
+async function readLastMessage(jsonPath: string): Promise<string> {
+  try {
+    const st = await stat(jsonPath);
+    if (st.size === 0) return "";
+
+    // 读最后 4KB
+    const readSize = Math.min(st.size, 4096);
+    const buffer = Buffer.alloc(readSize);
+    const fh = await open(jsonPath, "r");
+    try {
+      await fh.read(buffer, 0, readSize, st.size - readSize);
+    } finally {
+      await fh.close();
+    }
+
+    // 找最后一个完整行（最后一个换行符之后的内容可能是不完整的）
+    const text = buffer.toString("utf-8");
+    const lines = text.split("\n").filter((l) => l.trim());
+    if (lines.length === 0) return "";
+
+    // 从最后一行往前找，解析出消息文本
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const entry = JSON.parse(lines[i]);
+        // 提取消息文本
+        const msg = entry.message || entry;
+        if (msg?.role === "user" || msg?.role === "assistant") {
+          let text = "";
+          if (typeof msg.content === "string") {
+            text = msg.content;
+          } else if (Array.isArray(msg.content)) {
+            text = msg.content
+              .filter((c: any) => c.type === "text")
+              .map((c: any) => c.text)
+              .join("");
+          }
+          if (text) return text.slice(0, 80);
+        }
+      } catch {
+        // 非 JSON 行，跳过
+      }
+    }
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * 获取 session 列表（按置顶 + 更新时间排序，附带 lastMessage）
+ */
+export async function listSessions(): Promise<SessionMeta[]> {
   const database = getDb();
   const rows = database
-    .prepare("SELECT * FROM sessions ORDER BY updated_at DESC")
+    .prepare("SELECT * FROM sessions ORDER BY pinned DESC, updated_at DESC")
     .all() as any[];
 
-  return rows.map((row) => ({
+  // 并发读取每个 session 的最后一条消息
+  const lastMessages = await Promise.all(
+    rows.map((row) => readLastMessage(row.jsonl_path))
+  );
+
+  return rows.map((row, i) => ({
     id: row.id,
     title: row.title,
     modelId: row.model_id || "",
     cwd: row.cwd,
     jsonlPath: row.jsonl_path,
     messageCount: row.message_count,
+    pinned: row.pinned || 0,
+    lastMessage: lastMessages[i] || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
@@ -181,6 +251,7 @@ export function getSession(id: string): SessionMeta | null {
     cwd: row.cwd,
     jsonlPath: row.jsonl_path,
     messageCount: row.message_count,
+    pinned: row.pinned || 0,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -191,7 +262,7 @@ export function getSession(id: string): SessionMeta | null {
  */
 export function updateSession(
   id: string,
-  updates: Partial<Pick<SessionMeta, "title" | "messageCount" | "modelId">>
+  updates: Partial<Pick<SessionMeta, "title" | "messageCount" | "modelId" | "pinned">>
 ): void {
   const database = getDb();
   const now = new Date().toISOString();
@@ -210,6 +281,10 @@ export function updateSession(
   if (updates.messageCount !== undefined) {
     sets.push("message_count = ?");
     values.push(updates.messageCount);
+  }
+  if (updates.pinned !== undefined) {
+    sets.push("pinned = ?");
+    values.push(updates.pinned);
   }
 
   values.push(id);

@@ -23,6 +23,8 @@ interface AppState {
   // 会话搜索/筛选
   sessionSearch: string;
   setSessionSearch: (q: string) => void;
+  searchContent: boolean;
+  setSearchContent: (v: boolean) => void;
   sessionFilter: "all" | "today" | "week" | "month";
   setSessionFilter: (f: "all" | "today" | "week" | "month") => void;
 
@@ -80,6 +82,7 @@ interface AppState {
   deleteSession: (id: string) => Promise<void>;
   deleteSessions: (ids: string[]) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
+  togglePin: (id: string, pinned: boolean) => Promise<void>;
   sendMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>;
   regenerateMessage: () => Promise<void>;
   abortChat: () => void;
@@ -117,6 +120,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 会话搜索/筛选
   sessionSearch: "",
   setSessionSearch: (q) => set({ sessionSearch: q }),
+  searchContent: false,
+  setSearchContent: (v) => set({ searchContent: v }),
   sessionFilter: "all" as "all" | "today" | "week" | "month",
   setSessionFilter: (f) => set({ sessionFilter: f }),
 
@@ -254,7 +259,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   loadSessions: async () => {
     set({ loadingSessions: true });
     try {
-      const sessions = await api.fetchSessions();
+      const { sessionSearch, searchContent } = get();
+      const q = sessionSearch.trim() || undefined;
+      const sessions = await api.fetchSessions(q, q && searchContent ? true : undefined);
       set({ sessions, loadingSessions: false });
     } catch {
       set({ loadingSessions: false });
@@ -338,6 +345,21 @@ export const useAppStore = create<AppState>((set, get) => ({
       await api.updateSessionTitle(id, title);
     } catch (err: any) {
       console.error("重命名失败:", err.message);
+      get().loadSessions();
+    }
+  },
+
+  togglePin: async (id: string, pinned: boolean) => {
+    // 乐观更新
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, pinned: pinned ? 1 : 0 } : s
+      ),
+    }));
+    try {
+      await api.toggleSessionPin(id, pinned);
+    } catch (err: any) {
+      console.error("置顶失败:", err.message);
       get().loadSessions();
     }
   },

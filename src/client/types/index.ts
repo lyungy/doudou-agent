@@ -10,6 +10,8 @@ export interface SessionMeta {
   cwd: string;
   jsonlPath: string;
   messageCount: number;
+  pinned: number;
+  lastMessage?: string;
   createdAt: string;
   updatedAt: string;
 }

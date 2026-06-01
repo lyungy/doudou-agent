@@ -10,7 +10,7 @@ import { bold, success, error, dim, formatTime, printTable } from "../lib/format
 export async function sessionList(): Promise<void> {
   initCLI();
   const { listSessions } = await import("../../server/services/session.js");
-  const sessions = listSessions();
+  const sessions = await listSessions();
 
   if (sessions.length === 0) {
     console.log(dim("暂无 Session"));
@@ -54,7 +54,7 @@ export async function sessionDelete(id: string): Promise<void> {
 
   // 支持模糊匹配：如果 id 是短标识（8 位），查找完整 ID
   const { listSessions } = await import("../../server/services/session.js");
-  const sessions = listSessions();
+  const sessions = await listSessions();
   const matched = sessions.find(
     (s) => s.id === id || s.id.startsWith(id)
   );
@@ -82,7 +82,7 @@ export async function sessionExport(id: string, outFile?: string): Promise<void>
   const { readFileSync, existsSync, writeFileSync } = await import("fs");
 
   // 模糊匹配
-  const sessions = listSessions();
+  const sessions = await listSessions();
   const matched = sessions.find(
     (s) => s.id === id || s.id.startsWith(id)
   );

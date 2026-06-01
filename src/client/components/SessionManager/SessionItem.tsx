@@ -1,18 +1,21 @@
 /**
  * Session 卡片组件（会话管理页使用）
- * 卡片式布局：标题 + 消息数 + 时间 + 操作按钮
+ * 卡片式布局：标题 + 消息预览 + 模型 tag + 消息数 + 时间 + 操作按钮
  */
 import { useState, useRef, useEffect } from "react";
-import type { SessionMeta } from "../../types";
+import type { SessionMeta, ModelDef } from "../../types";
+import { ConfirmModal } from "../common/ConfirmModal";
 
 interface Props {
   session: SessionMeta;
   isActive: boolean;
   selectable?: boolean;
   selected?: boolean;
+  models?: ModelDef[];
   onSelect: () => void;
   onDelete: () => void;
   onRename: (newTitle: string) => void;
+  onTogglePin?: () => void;
 }
 
 /** 格式化时间为相对描述 */
@@ -31,9 +34,27 @@ function formatRelativeTime(dateStr: string): string {
   return date.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
 }
 
-export function SessionItem({ session, isActive, selectable, selected, onSelect, onDelete, onRename }: Props) {
+/** 模型名颜色轮转（5 种柔和背景色） */
+const MODEL_COLORS = [
+  "bg-blue-50 text-blue-600",
+  "bg-emerald-50 text-emerald-600",
+  "bg-amber-50 text-amber-600",
+  "bg-purple-50 text-purple-600",
+  "bg-rose-50 text-rose-600",
+];
+
+function getModelColor(modelId: string): string {
+  let hash = 0;
+  for (let i = 0; i < modelId.length; i++) {
+    hash = (hash * 31 + modelId.charCodeAt(i)) | 0;
+  }
+  return MODEL_COLORS[Math.abs(hash) % MODEL_COLORS.length];
+}
+
+export function SessionItem({ session, isActive, selectable, selected, models, onSelect, onDelete, onRename, onTogglePin }: Props) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
+  const [showConfirm, setShowConfirm] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -71,74 +92,131 @@ export function SessionItem({ session, isActive, selectable, selected, onSelect,
     }
   };
 
-  return (
-    <div
-      className={`group relative flex items-center gap-4 px-4 py-3.5 rounded-xl cursor-pointer transition-all duration-150 border ${
-        selected
-          ? "border-blue-500/50 bg-blue-500/5"
-          : isActive
-            ? "border-neutral-300 bg-white shadow-sm"
-            : "border-neutral-200 bg-white hover:border-neutral-300 hover:shadow-sm"
-      }`}
-      onClick={onSelect}
-    >
-      {/* 选择模式：checkbox */}
-      {selectable && (
-        <input
-          type="checkbox"
-          checked={selected || false}
-          onChange={() => onSelect()}
-          onClick={(e) => e.stopPropagation()}
-          className="w-4 h-4 rounded border-neutral-300 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 shrink-0"
-        />
-      )}
+  // 模型显示名
+  const modelDef = models?.find((m) => m.id === session.modelId);
+  const modelName = modelDef?.name || session.modelId || "";
+  const isPinned = !!session.pinned;
 
-      {/* 内容区 */}
-      <div className="flex-1 min-w-0">
-        {editing ? (
+  return (
+    <>
+      <div
+        className={`group relative flex items-center gap-4 px-4 py-3.5 rounded-xl cursor-pointer transition-all duration-150 border ${
+          selected
+            ? "border-blue-500/50 bg-blue-500/5"
+            : isActive
+              ? "border-neutral-300 bg-white shadow-sm"
+              : "border-neutral-200 bg-white hover:border-neutral-300 hover:shadow-sm"
+        }`}
+        onClick={onSelect}
+      >
+        {/* 选择模式：checkbox */}
+        {selectable && (
           <input
-            ref={inputRef}
-            value={editValue}
-            onChange={(e) => setEditValue(e.target.value)}
-            onBlur={confirmEdit}
-            onKeyDown={handleKeyDown}
+            type="checkbox"
+            checked={selected || false}
+            onChange={() => onSelect()}
             onClick={(e) => e.stopPropagation()}
-            className="w-full text-sm font-medium bg-transparent border-b border-neutral-300 outline-none px-0.5 py-0.5 text-neutral-800"
+            className="w-4 h-4 rounded border-neutral-300 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 shrink-0"
           />
-        ) : (
-          <div className="text-sm font-medium text-neutral-800 truncate" onDoubleClick={startEdit} title="双击重命名">
-            {session.title}
+        )}
+
+        {/* 内容区 */}
+        <div className="flex-1 min-w-0">
+          {editing ? (
+            <input
+              ref={inputRef}
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={confirmEdit}
+              onKeyDown={handleKeyDown}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full text-sm font-medium bg-transparent border-b border-neutral-300 outline-none px-0.5 py-0.5 text-neutral-800"
+            />
+          ) : (
+            <div className="flex items-center gap-1.5">
+              {/* 置顶图标 */}
+              {isPinned && (
+                <span className="text-sm shrink-0" title="已置顶">📌</span>
+              )}
+              <div className="text-sm font-medium text-neutral-800 truncate" onDoubleClick={startEdit} title="双击重命名">
+                {session.title}
+              </div>
+            </div>
+          )}
+
+          {/* 消息预览 */}
+          {session.lastMessage && (
+            <div className="text-xs text-neutral-400 truncate mt-0.5 ml-5">
+              {session.lastMessage}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 mt-1 text-xs text-neutral-400">
+            {/* 模型 tag */}
+            {modelName && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getModelColor(session.modelId)}`}>
+                {modelName}
+              </span>
+            )}
+            <span>{session.messageCount} 条消息</span>
+            <span>·</span>
+            <span>{formatRelativeTime(session.updatedAt)}</span>
+          </div>
+        </div>
+
+        {/* 操作按钮 */}
+        {!selectable && !editing && (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* 置顶按钮 */}
+            {onTogglePin && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePin();
+                }}
+                className={`p-1.5 rounded-lg transition-all ${
+                  isPinned
+                    ? "text-amber-500 hover:text-amber-600 hover:bg-amber-50"
+                    : "text-neutral-400 hover:text-amber-500 hover:bg-amber-50"
+                }`}
+                title={isPinned ? "取消置顶" : "置顶"}
+              >
+                📌
+              </button>
+            )}
+            <button
+              onClick={startEdit}
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-blue-500 hover:bg-blue-50 transition-all"
+              title="重命名"
+            >
+              ✏️
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowConfirm(true);
+              }}
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all"
+              title="删除"
+            >
+              🗑️
+            </button>
           </div>
         )}
-        <div className="flex items-center gap-3 mt-1 text-xs text-neutral-400">
-          <span>{session.messageCount} 条消息</span>
-          <span>·</span>
-          <span>{formatRelativeTime(session.updatedAt)}</span>
-        </div>
       </div>
 
-      {/* 操作按钮 */}
-      {!selectable && !editing && (
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={startEdit}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-blue-500 hover:bg-blue-50 transition-all"
-            title="重命名"
-          >
-            ✏️
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (confirm("确定删除这个对话？")) onDelete();
-            }}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-red-500 hover:bg-red-50 transition-all"
-            title="删除"
-          >
-            🗑️
-          </button>
-        </div>
-      )}
-    </div>
+      <ConfirmModal
+        open={showConfirm}
+        title="删除会话"
+        message={`确定删除「${session.title}」？删除后无法恢复。`}
+        confirmText="删除"
+        danger
+        onConfirm={() => {
+          setShowConfirm(false);
+          onDelete();
+        }}
+        onCancel={() => setShowConfirm(false)}
+      />
+    </>
   );
 }
