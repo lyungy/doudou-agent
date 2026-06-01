@@ -194,12 +194,12 @@ router.post("/stream", async (req: Request, res: Response) => {
 
     if (!aborted) {
       // LLM 追踪：完成
-      // 从最后一条 assistant 消息获取 usage（pi-agent-core 的 AgentMessage 结构）
+      // 从最后一条 assistant 消息获取 usage（pi-ai 的 Usage 结构）
       const lastAssistant = allMsgs.filter((m: any) => m.role === "assistant").pop();
       const usage = (lastAssistant as any)?.usage;
       tracker.onComplete(requestId, {
-        inputTokens: usage?.inputTokens,
-        outputTokens: usage?.outputTokens,
+        inputTokens: usage?.input,
+        outputTokens: usage?.output,
       });
 
       // 推送最终状态
