@@ -5,6 +5,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { SessionMeta, ModelDef } from "../../types";
 import { ConfirmModal } from "../common/ConfirmModal";
+import { generateSessionUrl } from "../../lib/url";
 
 interface Props {
   session: SessionMeta;
@@ -92,6 +93,22 @@ export function SessionItem({ session, isActive, selectable, selected, models, o
     }
   };
 
+  // 支持 Ctrl/Cmd + 点击在新标签页打开
+  const handleClick = (e: React.MouseEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      window.open(generateSessionUrl(session.id), "_blank");
+      return;
+    }
+    onSelect();
+  };
+
+  // 在新标签页打开
+  const openInNewTab = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(generateSessionUrl(session.id), "_blank");
+  };
+
   // 模型显示名
   const modelDef = models?.find((m) => m.id === session.modelId);
   const modelName = modelDef?.name || session.modelId || "";
@@ -107,7 +124,7 @@ export function SessionItem({ session, isActive, selectable, selected, models, o
               ? "border-neutral-300 bg-white shadow-sm"
               : "border-neutral-200 bg-white hover:border-neutral-300 hover:shadow-sm"
         }`}
-        onClick={onSelect}
+        onClick={handleClick}
       >
         {/* 选择模式：checkbox */}
         {selectable && (
@@ -190,6 +207,13 @@ export function SessionItem({ session, isActive, selectable, selected, models, o
               title="重命名"
             >
               ✏️
+            </button>
+            <button
+              onClick={openInNewTab}
+              className="p-1.5 rounded-lg text-neutral-400 hover:text-blue-500 hover:bg-blue-50 transition-all"
+              title="在新标签页打开"
+            >
+              🔗
             </button>
             <button
               onClick={(e) => {

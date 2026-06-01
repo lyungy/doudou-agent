@@ -202,6 +202,96 @@ function handleSSEEvent(type: string, data: any, callbacks: ChatStreamCallbacks)
   }
 }
 
+// ============ Chat Status & Resume API ============
+
+export async function checkChatStatus(sessionId: string): Promise<{ streaming: boolean; messageCount?: number }> {
+  return request(`/chat/status/${sessionId}`);
+}
+
+export interface ResumeStreamCallbacks {
+  onCatchup: (data: { text: string; thinking?: string; toolCalls?: Array<{ id: string; name: string; args: any; status: string }> }) => void;
+  onTextDelta: (delta: string) => void;
+  onThinkingStart: () => void;
+  onThinkingDelta: (delta: string) => void;
+  onThinkingEnd: () => void;
+  onToolExecStart: (data: { toolCallId: string; toolName: string; args: any }) => void;
+  onToolExecEnd: (data: { toolCallId: string; toolName: string; result: any; isError: boolean }) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
+export async function resumeChat(
+  sessionId: string,
+  callbacks: ResumeStreamCallbacks,
+  signal?: AbortSignal
+): Promise<void> {
+  const response = await fetch(`${BASE}/chat/resume/${sessionId}`, { signal });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(err.error || "Resume 请求失败");
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+
+    let eventType = "";
+    for (const line of lines) {
+      if (line.startsWith("event: ")) {
+        eventType = line.slice(7).trim();
+      } else if (line.startsWith("data: ")) {
+        const dataStr = line.slice(6);
+        if (!eventType || eventType === "heartbeat") continue;
+        try {
+          const data = JSON.parse(dataStr);
+          handleResumeEvent(eventType, data, callbacks);
+        } catch {}
+      }
+    }
+  }
+}
+
+function handleResumeEvent(type: string, data: any, callbacks: ResumeStreamCallbacks) {
+  switch (type) {
+    case "catchup":
+      callbacks.onCatchup(data);
+      break;
+    case "text_delta":
+      callbacks.onTextDelta(data.delta);
+      break;
+    case "thinking_start":
+      callbacks.onThinkingStart();
+      break;
+    case "thinking_delta":
+      callbacks.onThinkingDelta(data.delta);
+      break;
+    case "thinking_end":
+      callbacks.onThinkingEnd();
+      break;
+    case "tool_exec_start":
+      callbacks.onToolExecStart(data);
+      break;
+    case "tool_exec_end":
+      callbacks.onToolExecEnd(data);
+      break;
+    case "done":
+      callbacks.onDone();
+      break;
+    case "error":
+      callbacks.onError(data.error);
+      break;
+  }
+}
+
 // ============ Logs API ============
 
 export interface LogFilter {

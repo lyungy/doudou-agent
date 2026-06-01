@@ -5,12 +5,19 @@
 import { useState } from "react";
 import { useAppStore } from "../../store";
 import type { MainView, LogSubView } from "../../types";
+import { generateSessionUrl } from "../../lib/url";
 
 export function Navigation() {
   const { currentView, setCurrentView, createSession } = useAppStore();
   const [logsExpanded, setLogsExpanded] = useState(false);
 
-  const handleCreate = async () => {
+  const handleCreate = async (e?: React.MouseEvent) => {
+    // Ctrl/Cmd + 点击 → 在新标签页打开新会话
+    if (e && (e.ctrlKey || e.metaKey)) {
+      const session = await createSession("新对话");
+      window.open(generateSessionUrl(session.id), "_blank");
+      return;
+    }
     await createSession("新对话");
   };
 
@@ -24,8 +31,9 @@ export function Navigation() {
       {/* 新建对话 */}
       <div className="px-3 pt-5 pb-4">
         <button
-          onClick={handleCreate}
+          onClick={(e) => handleCreate(e)}
           className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2.5 rounded-xl transition-all active:scale-[0.98]"
+          title="Ctrl+点击在新标签页打开"
         >
           <span className="text-lg leading-none">+</span>
           新建对话

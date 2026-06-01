@@ -77,6 +77,17 @@ export async function getOrCreateAgent(
 ): Promise<{ agent: Agent; historyCount: number }> {
   const existing = agents.get(sessionId);
   if (existing) {
+    // 如果旧 Agent 仍在执行中（SSE 断开后后台继续），等它完成后再复用
+    // 避免两个 prompt 并发导致消息混乱
+    if (existing.state.isStreaming) {
+      getLogger().info("agent", `旧 Agent 仍在执行，等待完成后复用`, { sessionId });
+      try {
+        await existing.waitForIdle();
+      } catch {
+        // 忽略等待错误
+      }
+    }
+
     // 模型热切换：如果模型变了，更新 Agent 的 model
     if (existing.state.model?.id !== model.id) {
       getLogger().info("agent", `模型热切换: ${existing.state.model?.id} → ${model.id}`, { sessionId });
@@ -175,4 +186,11 @@ export function getAgentState(sessionId: string) {
     messageCount: agent.state.messages.length,
     pendingToolCalls: Array.from(agent.state.pendingToolCalls),
   };
+}
+
+/**
+ * 获取 Agent 实例（供 resume 路由使用，不创建新实例）
+ */
+export function getAgentForResume(sessionId: string): Agent | null {
+  return agents.get(sessionId) || null;
 }

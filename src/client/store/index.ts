@@ -4,6 +4,7 @@
 import { create } from "zustand";
 import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel, MainView, LogSubView, Task, TaskRun, PromptTemplate } from "../types";
 import * as api from "../lib/client";
+import { getSessionIdFromUrl, updateUrlWithSession, pushSessionHistory, isValidSessionId } from "../lib/url";
 
 interface AppState {
   // 模型状态
@@ -86,7 +87,7 @@ interface AppState {
   setModel: (modelId: string) => void;
   loadSessions: () => Promise<void>;
   createSession: (title?: string) => Promise<SessionMeta>;
-  selectSession: (id: string) => Promise<void>;
+  selectSession: (id: string, pushHistory?: boolean) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   deleteSessions: (ids: string[]) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
@@ -94,6 +95,9 @@ interface AppState {
   sendMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>;
   regenerateMessage: () => Promise<void>;
   abortChat: () => void;
+
+  // 初始化（页面加载时调用，从 URL 恢复会话状态）
+  initApp: () => Promise<void>;
 
   // 内部方法
   _setStreaming: (v: boolean) => void;
@@ -103,6 +107,9 @@ interface AppState {
   _addToolCall: (tc: ToolCallInfo) => void;
   _updateToolCall: (id: string, updates: Partial<ToolCallInfo>) => void;
   _commitAssistantMessage: () => void;
+
+  // SSE 重连（刷新后自动恢复）
+  _resumeStream: (sessionId: string) => Promise<void>;
 }
 
 let abortController: AbortController | null = null;
@@ -311,10 +318,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentView: "chat" as MainView,
       messages: [],
     }));
+    // 同步 URL（替换当前历史记录）
+    updateUrlWithSession(session.id);
     return session;
   },
 
-  selectSession: async (id: string) => {
+  selectSession: async (id: string, pushHistory = true) => {
     const session = get().sessions.find((s) => s.id === id);
     set({
       currentSessionId: id,
@@ -323,13 +332,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentModelId: session?.modelId || get().currentModelId,
     });
 
+    // 同步 URL
+    if (pushHistory) {
+      pushSessionHistory(id);
+    } else {
+      updateUrlWithSession(id);
+    }
+
+    // 加载已持久化的历史消息
     try {
       const rawMessages = await api.fetchSessionMessages(id);
       const messages = convertToChatMessages(rawMessages);
       set({ messages });
     } catch (err: any) {
       console.error("加载消息失败:", err.message);
-      // 即使加载失败，也保留 session 选中状态（显示空对话）
+    }
+
+    // 检测 Agent 是否仍在流式中，自动重连 SSE
+    try {
+      const status = await api.checkChatStatus(id);
+      if (status.streaming) {
+        await get()._resumeStream(id);
+      }
+    } catch {
+      // 状态检测失败，不影响正常使用
     }
   },
 
@@ -341,6 +367,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         state.currentSessionId === id ? (sessions[0]?.id || null) : state.currentSessionId;
       return { sessions, currentSessionId };
     });
+
+    // 同步 URL
+    const { currentSessionId } = get();
+    updateUrlWithSession(currentSessionId);
 
     // 再调后端
     try {
@@ -361,6 +391,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         : state.currentSessionId;
       return { sessions: remaining, currentSessionId };
     });
+
+    // 同步 URL
+    const { currentSessionId } = get();
+    updateUrlWithSession(currentSessionId);
 
     try {
       await api.deleteSessions(ids);
@@ -513,6 +547,113 @@ export const useAppStore = create<AppState>((set, get) => ({
     abortController?.abort();
     abortController = null;
     set({ isStreaming: false, streamingMessageId: null });
+  },
+
+  /** 重连 Agent 正在执行的 SSE 流（刷新后自动恢复） */
+  _resumeStream: async (sessionId: string) => {
+    const assistantId = `resume-${Date.now()}`;
+
+    // 设置流式状态，UI 显示加载动画
+    set((state) => ({
+      isStreaming: true,
+      streamingMessageId: assistantId,
+      currentText: "",
+      currentThinking: "",
+      currentToolCalls: [],
+      llmStatusBySession: {
+        ...state.llmStatusBySession,
+        [sessionId]: { status: "streaming" } as LLMStatusData,
+      },
+    }));
+
+    // 在消息列表末尾追加空的 assistant 消息（后续填充）
+    set((state) => ({
+      messages: [...state.messages, {
+        id: assistantId,
+        type: "assistant" as const,
+        content: "",
+        timestamp: Date.now(),
+      }],
+    }));
+
+    abortController = new AbortController();
+
+    try {
+      await api.resumeChat(sessionId, {
+        onCatchup: (data) => {
+          // 用累积内容替换当前流式消息
+          const catchupToolCalls: ToolCallInfo[] | undefined = data.toolCalls?.map((tc: any) => ({
+            id: tc.id,
+            name: tc.name,
+            args: tc.args,
+            status: (tc.status as ToolCallInfo["status"]) || "done",
+          }));
+          set((state) => {
+            const messages = [...state.messages];
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg && lastMsg.type === "assistant") {
+              messages[messages.length - 1] = {
+                ...lastMsg,
+                content: data.text,
+                thinking: data.thinking || undefined,
+                toolCalls: catchupToolCalls,
+              };
+            }
+            return {
+              messages,
+              currentText: data.text,
+              currentThinking: data.thinking || "",
+              currentToolCalls: catchupToolCalls || [],
+            };
+          });
+        },
+        onTextDelta: (delta) => get()._appendText(delta),
+        onThinkingStart: () => get()._setThinking("") ,
+        onThinkingDelta: (delta) => get()._appendThinking(delta),
+        onThinkingEnd: () => {},
+        onToolExecStart: (data) => {
+          get()._addToolCall({ id: data.toolCallId, name: data.toolName, args: data.args, status: "running" });
+        },
+        onToolExecEnd: (data) => {
+          get()._updateToolCall(data.toolCallId, { result: data.result, status: data.isError ? "error" : "done", isError: data.isError });
+        },
+        onDone: () => {
+          get()._commitAssistantMessage();
+          set({ isStreaming: false, streamingMessageId: null });
+        },
+        onError: () => {
+          get()._commitAssistantMessage();
+          set({ isStreaming: false, streamingMessageId: null });
+        },
+      }, abortController.signal);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        get()._commitAssistantMessage();
+        set({ isStreaming: false, streamingMessageId: null });
+      }
+    }
+  },
+
+  // ============ 初始化 ============
+
+  initApp: async () => {
+    // 1. 加载模型列表
+    await get().loadModels();
+    // 2. 加载会话列表
+    await get().loadSessions();
+    // 3. 从 URL 恢复会话状态
+    const urlSessionId = getSessionIdFromUrl();
+    if (urlSessionId) {
+      const { sessions } = get();
+      if (isValidSessionId(urlSessionId, sessions.map((s) => s.id))) {
+        // 有效会话 ID，恢复选中（不推送历史，因为当前就是 URL 来源）
+        await get().selectSession(urlSessionId, false);
+      } else {
+        // 无效会话 ID，清除 URL 参数
+        console.warn("URL 中的会话 ID 无效，已清除:", urlSessionId);
+        updateUrlWithSession(null);
+      }
+    }
   },
 
   // ============ 内部方法 ============

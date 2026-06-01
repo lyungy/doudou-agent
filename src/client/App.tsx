@@ -3,7 +3,7 @@
  * 左侧导航栏 + 右侧内容区（按 currentView 联动）
  */
 import { useAppStore } from "./store";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "./components/Navigation/Navigation";
 import { HomePage } from "./components/HomePage";
 import { MessageList } from "./components/Chat/MessageList";
@@ -19,7 +19,33 @@ import { TaskLogList } from "./components/Tasks/TaskLogList";
 import { SessionList } from "./components/SessionManager/SessionList";
 
 export default function App() {
-  const { currentView, currentSessionId, logSubView } = useAppStore();
+  const { currentView, currentSessionId, logSubView, initApp, selectSession, sessions } = useAppStore();
+
+  // 初始化：加载模型+会话+从 URL 恢复
+  useEffect(() => {
+    initApp();
+  }, [initApp]);
+
+  // 浏览器前进/后退支持
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      const sessionId = e.state?.sessionId || null;
+      if (sessionId) {
+        // 验证会话是否有效
+        const valid = sessions.some((s) => s.id === sessionId);
+        if (valid) {
+          selectSession(sessionId, false);
+          return;
+        }
+      }
+      // 无效或无 session → 回到首页
+      useAppStore.getState().setCurrentView("home");
+      useAppStore.setState({ currentSessionId: null, messages: [] });
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [selectSession, sessions]);
 
   return (
     <div className="flex h-screen bg-neutral-50">

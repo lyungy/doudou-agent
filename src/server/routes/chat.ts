@@ -7,7 +7,7 @@ import type { Request, Response } from "express";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModelById } from "../services/config.js";
 import { getSession, updateSession, openSession } from "../services/session.js";
-import { getOrCreateAgent, abortAgent } from "../services/agent.js";
+import { getOrCreateAgent, abortAgent, getAgentState } from "../services/agent.js";
 import { getLLMTracker } from "../services/llm-tracker.js";
 import { getLogger } from "../services/logger.js";
 
@@ -78,7 +78,9 @@ router.post("/stream", async (req: Request, res: Response) => {
   // 推送 LLM 状态事件
   sendEvent("llm_status", { status: "connecting", requestId });
 
-  // 客户端断开
+  // 客户端断开（刷新/关闭页面）
+  // 注意：不 abort Agent，让它在后台完成执行并持久化消息
+  // 刷新后前端会重新加载消息，用户可继续对话
   let aborted = false;
   let agentInstance: any = null;
   req.socket.on("close", () => {
@@ -86,14 +88,10 @@ router.post("/stream", async (req: Request, res: Response) => {
       aborted = true;
       connectionClosed = true;
       clearInterval(heartbeat);
-      agentInstance?.abort();
 
-      // 记录异常断开
+      // 不 abort agent，让它后台完成
       const duration = Date.now() - connectionStart;
-      logger.warn("sse", "SSE 连接客户端断开", { sessionId, duration, eventCount: sseEventCount });
-
-      // LLM 追踪：中止
-      tracker.onAbort(requestId);
+      logger.info("sse", "SSE 连接客户端断开，Agent 继续后台执行", { sessionId, duration, eventCount: sseEventCount });
     }
   });
 
@@ -241,6 +239,110 @@ router.post("/abort", (req: Request, res: Response) => {
   if (!sessionId) return res.status(400).json({ error: "缺少 sessionId" });
   abortAgent(sessionId);
   res.json({ ok: true });
+});
+
+/**
+ * GET /api/chat/status/:sessionId — 检测 Agent 是否在流式中
+ */
+router.get("/status/:sessionId", (req: Request, res: Response) => {
+  const sessionId = req.params.sessionId as string;
+  const state = getAgentState(sessionId);
+  if (!state || !state.isStreaming) {
+    return res.json({ streaming: false });
+  }
+  res.json({ streaming: true, messageCount: state.messageCount });
+});
+
+/**
+ * GET /api/chat/resume/:sessionId — 重连 SSE，接收正在流式的内容
+ * 前端刷新后检测到 Agent 仍在执行，自动重连继续接收输出
+ */
+router.get("/resume/:sessionId", async (req: Request, res: Response) => {
+  const sessionId = req.params.sessionId as string;
+  const logger = getLogger();
+
+  const state = getAgentState(sessionId);
+  if (!state?.isStreaming) {
+    return res.status(404).json({ error: "Agent 不在流式状态" });
+  }
+
+  // SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+
+  const sendEvent = (type: string, data: any) => {
+    if (res.writableEnded) return;
+    res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`);
+    try { (res as any).flush?.(); } catch {}
+  };
+
+  // 从 agent 获取当前已累积的内容，一次性推送给前端
+  const { getAgentForResume } = await import("../services/agent.js");
+  const agent = getAgentForResume(sessionId);
+  if (!agent) {
+    sendEvent("error", { error: "Agent 不存在" });
+    res.end();
+    return;
+  }
+
+  // 推送 catchup：当前流式消息的已累积内容
+  const streamingMsg = agent.state.streamingMessage as any;
+  if (streamingMsg) {
+    const content = streamingMsg.content || [];
+    const text = content
+      .filter((c: any) => c.type === "text")
+      .map((c: any) => c.text)
+      .join("") || "";
+    const thinking = content
+      .filter((c: any) => c.type === "thinking")
+      .map((c: any) => c.thinking || c.text || "")
+      .join("") || "";
+    const toolCalls = content
+      .filter((c: any) => c.type === "toolCall")
+      .map((c: any) => ({
+        id: c.toolCallId || "",
+        name: c.toolName || "",
+        args: c.arguments || {},
+        status: "done" as const,
+      }));
+
+    sendEvent("catchup", { text, thinking, toolCalls: toolCalls.length ? toolCalls : undefined });
+  }
+
+  // 心跳
+  const heartbeat = setInterval(() => sendEvent("heartbeat", {}), 15000);
+
+  let closed = false;
+  req.socket.on("close", () => {
+    closed = true;
+    clearInterval(heartbeat);
+    logger.info("sse", "Resume SSE 连接断开", { sessionId });
+  });
+
+  // 订阅 Agent 后续事件，实时转发
+  const unsubscribe = agent.subscribe((event: AgentEvent) => {
+    if (closed) return;
+    const sseData = convertToSSE(event);
+    if (sseData) {
+      sendEvent(sseData.type, sseData.data);
+    }
+  });
+
+  // 等待 Agent 执行完成
+  try {
+    await agent.waitForIdle();
+  } catch {
+    // 忽略
+  }
+
+  unsubscribe();
+  clearInterval(heartbeat);
+  if (!closed && !res.writableEnded) {
+    sendEvent("done", { reason: "stop" });
+    res.end();
+  }
 });
 
 function convertToSSE(event: AgentEvent): { type: string; data: any } | null {
