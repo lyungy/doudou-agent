@@ -1,24 +1,13 @@
 /**
  * 提示词模板卡片网格
- * 新建会话（消息为空）时显示，点击模板发送消息
+ * 新建会话（消息为空）时显示，点击模板将内容填入输入框
  */
 import { useEffect } from "react";
 import { useAppStore } from "../../store";
 import type { PromptTemplate } from "../../types";
 
-/** 按分类分组 */
-function groupByCategory(templates: PromptTemplate[]): Map<string, PromptTemplate[]> {
-  const groups = new Map<string, PromptTemplate[]>();
-  for (const tpl of templates) {
-    const cat = tpl.category || "通用";
-    if (!groups.has(cat)) groups.set(cat, []);
-    groups.get(cat)!.push(tpl);
-  }
-  return groups;
-}
-
 export function PromptTemplates() {
-  const { templates, loadingTemplates, loadTemplates, sendTemplate } = useAppStore();
+  const { templates, loadingTemplates, loadTemplates } = useAppStore();
 
   useEffect(() => {
     if (templates.length === 0 && !loadingTemplates) {
@@ -36,8 +25,6 @@ export function PromptTemplates() {
 
   if (templates.length === 0) return null;
 
-  const groups = groupByCategory(templates);
-
   return (
     <div className="flex-1 flex items-start justify-center overflow-y-auto px-6 py-12">
       <div className="w-full max-w-2xl">
@@ -48,30 +35,23 @@ export function PromptTemplates() {
           <p className="text-sm text-neutral-400">选择一个模板开始，或直接在下方输入</p>
         </div>
 
-        {/* 按分类展示 */}
-        {Array.from(groups.entries()).map(([category, tpls]) => (
-          <div key={category} className="mb-6">
-            {groups.size > 1 && (
-              <h3 className="text-xs font-medium text-neutral-400 uppercase tracking-wider mb-3 px-1">
-                {category}
-              </h3>
-            )}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {tpls.map((tpl) => (
-                <TemplateCard key={tpl.id} template={tpl} onClick={() => sendTemplate(tpl)} />
-              ))}
-            </div>
-          </div>
-        ))}
+        {/* 模板卡片网格（不分类，统一展示） */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {templates.map((tpl) => (
+            <TemplateCard key={tpl.id} template={tpl} />
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function TemplateCard({ template, onClick }: { template: PromptTemplate; onClick: () => void }) {
+function TemplateCard({ template }: { template: PromptTemplate }) {
+  const fillTemplate = useAppStore((s) => s.fillTemplate);
+
   return (
     <button
-      onClick={onClick}
+      onClick={() => fillTemplate(template)}
       className="group flex flex-col items-start p-4 bg-white border border-neutral-200 rounded-xl
                  hover:border-blue-300 hover:shadow-md hover:-translate-y-0.5
                  active:translate-y-0 active:shadow-sm

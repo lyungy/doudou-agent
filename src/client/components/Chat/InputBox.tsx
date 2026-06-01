@@ -63,10 +63,22 @@ export function InputBox() {
   const { send, abort, isStreaming } = useChat();
   const currentModelId = useAppStore((s) => s.currentModelId);
   const models = useAppStore((s) => s.models);
+  const pendingTemplateContent = useAppStore((s) => s.pendingTemplateContent);
+  const clearPendingTemplate = useAppStore((s) => s.clearPendingTemplate);
 
   // 检测当前模型是否支持图片
   const currentModel = models.find((m) => m.id === currentModelId);
   const supportsImages = currentModel?.input?.includes("image") ?? false;
+
+  // 模板内容填入输入框
+  useEffect(() => {
+    if (pendingTemplateContent) {
+      setInput(pendingTemplateContent);
+      clearPendingTemplate();
+      // 聚焦输入框
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }
+  }, [pendingTemplateContent, clearPendingTemplate]);
 
   useEffect(() => {
     const el = textareaRef.current;

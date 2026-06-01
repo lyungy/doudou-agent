@@ -37,8 +37,10 @@ interface AppState {
   // 提示词模板
   templates: PromptTemplate[];
   loadingTemplates: boolean;
+  pendingTemplateContent: string | null;  // 待填入输入框的模板内容
   loadTemplates: () => Promise<void>;
-  sendTemplate: (template: PromptTemplate) => Promise<void>;
+  fillTemplate: (template: PromptTemplate) => Promise<void>;
+  clearPendingTemplate: () => void;
 
   // 日志子视图
   logSubView: LogSubView;
@@ -151,6 +153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 提示词模板
   templates: [],
   loadingTemplates: false,
+  pendingTemplateContent: null,
   loadTemplates: async () => {
     set({ loadingTemplates: true });
     try {
@@ -160,17 +163,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ loadingTemplates: false });
     }
   },
-  sendTemplate: async (template: PromptTemplate) => {
-    // 读取模板内容后作为消息发送
+  fillTemplate: async (template: PromptTemplate) => {
+    // 读取模板内容后填入输入框（不直接发送）
     try {
       const full = await api.fetchTemplate(template.id);
       if (full.content) {
-        await get().sendMessage(full.content);
+        set({ pendingTemplateContent: full.content });
       }
     } catch (err: any) {
-      console.error("发送模板失败:", err.message);
+      console.error("加载模板失败:", err.message);
     }
   },
+  clearPendingTemplate: () => set({ pendingTemplateContent: null }),
 
   // 日志子视图
   logSubView: "system" as LogSubView,
