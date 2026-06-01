@@ -100,7 +100,7 @@ router.post("/stream", async (req: Request, res: Response) => {
   try {
     const model = getModelById(modelId || sessionMeta.modelId || undefined);
     logger.debug("sse", `解析模型: ${model.id} (请求modelId=${modelId}, sessionModelId=${sessionMeta.modelId})`, { sessionId });
-    const agent = await getOrCreateAgent(sessionId, model);
+    const { agent, historyCount } = await getOrCreateAgent(sessionId, model);
     agentInstance = agent;
     logger.info("sse", `Agent 实际模型: ${agent.state.model?.id}`, { sessionId });
 
@@ -182,9 +182,13 @@ router.post("/stream", async (req: Request, res: Response) => {
     await agent.prompt(message, imageContents?.length ? imageContents : undefined);
     await agent.waitForIdle();
 
-    // 兜底：确保所有 Agent 消息都已持久化（跳过已写的）
+    // 兜底：确保所有新增 Agent 消息都已持久化（跳过历史消息和已写的）
     const allMsgs = agent.state.messages;
-    for (let i = persistCount; i < allMsgs.length; i++) {
+    const fallbackStart = Math.max(historyCount, persistCount);
+    if (fallbackStart < allMsgs.length) {
+      logger.info("sse", `兜底持久化: index ${fallbackStart}~${allMsgs.length - 1}（historyCount=${historyCount}, persistCount=${persistCount}）`, { sessionId });
+    }
+    for (let i = fallbackStart; i < allMsgs.length; i++) {
       await persistMessage(allMsgs[i]);
     }
 

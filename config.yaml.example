@@ -62,3 +62,7 @@ logging:
   level: info              # debug | info | warn | error
   dir: ./logs              # 日志文件目录
   max_days: 7              # 保留天数，超过自动清理
+
+# 上下文配置
+context:
+  max_messages: 100        # 历史消息截断上限（条），防止超长上下文撑爆 LLM context window

@@ -30,23 +30,51 @@ function loadSystemPrompt(): string {
 /** 活跃的 Agent 实例映射（sessionId → Agent） */
 const agents = new Map<string, Agent>();
 
+/** 默认历史消息截断上限 */
+const DEFAULT_MAX_MESSAGES = 100;
+
+/**
+ * 截断历史消息，保留最近 maxMessages 条，不切断 turn 边界
+ * 一个 turn 从 user 消息开始，截断时往前找最近的 user 消息作为起点
+ * 避免出现孤立的 toolResult 或 assistant 消息
+ */
+function truncateMessages(messages: any[], maxMessages: number): any[] {
+  if (messages.length <= maxMessages) return messages;
+
+  // 从截断位置往前找最近的 user 消息作为起点
+  const cutoff = messages.length - maxMessages;
+  let start = cutoff;
+  while (start > 0 && messages[start]?.role !== "user") {
+    start--;
+  }
+
+  const dropped = start;
+  if (dropped > 0) {
+    getLogger().info("agent", `历史消息截断：丢弃 ${dropped} 条，保留 ${messages.length - dropped} 条（上限 ${maxMessages}）`);
+  }
+
+  return messages.slice(start);
+}
+
 /**
  * 供任务调度器使用：创建独立 Agent 并执行
  * 不缓存实例，执行完后由调用方决定是否清理
  */
 export async function getAgent(sessionId: string, modelId?: string): Promise<Agent> {
   const model = getModelById(modelId);
-  return getOrCreateAgent(sessionId, model);
+  const { agent } = await getOrCreateAgent(sessionId, model);
+  return agent;
 }
 
 /**
  * 获取或创建 Agent 实例（异步：首次创建时加载 JSONL 历史消息）
+ * 返回 agent 实例和历史消息数量（用于持久化时区分历史/新增消息）
  */
 export async function getOrCreateAgent(
   sessionId: string,
   model: Model<any>,
   systemPrompt?: string
-): Promise<Agent> {
+): Promise<{ agent: Agent; historyCount: number }> {
   const existing = agents.get(sessionId);
   if (existing) {
     // 模型热切换：如果模型变了，更新 Agent 的 model
@@ -56,7 +84,8 @@ export async function getOrCreateAgent(
     } else {
       getLogger().debug("agent", `Agent 复用，模型不变: ${model.id}`, { sessionId });
     }
-    return existing;
+    // 复用时 historyCount=0，表示无新增历史需要跳过
+    return { agent: existing, historyCount: existing.state.messages.length };
   }
 
   getLogger().info("agent", `创建新 Agent，模型: ${model.id}`, { sessionId });
@@ -78,6 +107,10 @@ export async function getOrCreateAgent(
   }
 
   const config = getConfig();
+
+  // 历史消息截断：防止超长上下文撑爆 LLM context window
+  const maxMessages = config.context.max_messages || DEFAULT_MAX_MESSAGES;
+  historyMessages = truncateMessages(historyMessages, maxMessages);
 
   // 使用配置的 thinking level；模型不支持 thinking 时降级为 off
   let thinkingLevel = config.llm.thinking_level || "off";
@@ -106,7 +139,7 @@ export async function getOrCreateAgent(
   });
 
   agents.set(sessionId, agent);
-  return agent;
+  return { agent, historyCount: historyMessages.length };
 }
 
 /**

@@ -60,6 +60,7 @@ router.put("/", (req, res) => {
       storage: { ...current.storage, ...updates.storage },
       server: { ...current.server, ...updates.server },
       logging: { ...current.logging, ...(updates as any).logging },
+      context: { ...current.context, ...(updates as any).context },
     };
 
     saveConfig(newConfig);

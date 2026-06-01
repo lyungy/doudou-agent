@@ -67,12 +67,18 @@ export interface LoggingConfig {
   max_days: number;
 }
 
+/** 上下文配置 */
+export interface ContextConfig {
+  max_messages: number;
+}
+
 /** 完整配置 */
 export interface AppConfig {
   llm: LLMConfig;
   storage: StorageConfig;
   server: ServerConfig;
   logging: LoggingConfig;
+  context: ContextConfig;
 }
 
 // ============ 加载逻辑 ============
@@ -142,6 +148,9 @@ export function loadConfig(path?: string): AppConfig {
       dir: parsed.logging?.dir || "./logs",
       max_days: parsed.logging?.max_days || 7,
     },
+    context: {
+      max_messages: parsed.context?.max_messages || 100,
+    },
   };
 
   currentConfig = config;
@@ -171,6 +180,7 @@ export function saveConfig(config: AppConfig): void {
     server: config.server,
     storage: config.storage,
     logging: config.logging,
+    context: config.context,
   };
   writeFileSync(configPath, yaml.dump(data, { lineWidth: 120 }), "utf-8");
   currentConfig = config;
