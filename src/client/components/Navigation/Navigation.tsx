@@ -1,64 +1,26 @@
 /**
- * 左侧导航栏
- * 新建对话 → 首页 / 会话(可折叠) / 定时任务 / 日志(子菜单: 系统日志+任务日志) → 版本号
+ * 左侧导航栏（一级菜单）
+ * 新建对话 → 首页 / 会话 / 定时任务 / 日志(子菜单) / 配置 → 版本号
  */
 import { useState } from "react";
 import { useAppStore } from "../../store";
 import type { MainView, LogSubView } from "../../types";
-import { SessionSubMenu } from "./SessionSubMenu";
 
 export function Navigation() {
-  const {
-    currentView,
-    setCurrentView,
-    logSubView,
-    setLogSubView,
-    sessionsExpanded,
-    toggleSessionsExpanded,
-    createSession,
-    sessions,
-    deleteSessions,
-  } = useAppStore();
-
-  // 批量删除状态
-  const [selectMode, setSelectMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  // 日志折叠状态
+  const { currentView, setCurrentView, createSession } = useAppStore();
   const [logsExpanded, setLogsExpanded] = useState(false);
 
   const handleCreate = async () => {
     await createSession("新对话");
   };
 
-  const enterBatchMode = () => {
-    setSelectMode(true);
-    setSelectedIds(new Set());
-  };
-
-  const exitBatchMode = () => {
-    setSelectMode(false);
-    setSelectedIds(new Set());
-  };
-
-  const selectAll = () => {
-    if (selectedIds.size === sessions.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(sessions.map((s) => s.id)));
-  };
-
-  const handleBatchDelete = async () => {
-    if (selectedIds.size === 0) return;
-    if (!confirm(`确定删除 ${selectedIds.size} 个对话？`)) return;
-    await deleteSessions(Array.from(selectedIds));
-    exitBatchMode();
-  };
-
   const handleLogClick = (sub: LogSubView) => {
-    setLogSubView(sub);
+    useAppStore.getState().setLogSubView(sub);
     setCurrentView("logs");
   };
 
   return (
-    <div className="w-60 bg-neutral-900 flex flex-col h-full">
+    <div className="w-52 bg-neutral-900 flex flex-col h-full">
       {/* 新建对话 */}
       <div className="px-3 pt-5 pb-4">
         <button
@@ -70,12 +32,10 @@ export function Navigation() {
         </button>
       </div>
 
-      {/* 分割线 */}
       <div className="mx-3 border-t border-neutral-700/50" />
 
       {/* 导航项 */}
       <nav className="flex-1 overflow-y-auto px-2 pt-4 pb-3 space-y-1.5">
-        {/* 首页 */}
         <NavItem
           icon="🏠"
           label="首页"
@@ -83,80 +43,13 @@ export function Navigation() {
           onClick={() => setCurrentView("home")}
         />
 
-        {/* 会话 — 可折叠 */}
-        <div>
-          <div
-            className={`group w-full flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm transition-all duration-150 ${
-              currentView === "chat"
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
-            }`}
-          >
-            <span
-              className="flex items-center gap-2.5 flex-1 cursor-pointer"
-              onClick={toggleSessionsExpanded}
-            >
-              <span className="text-sm shrink-0">💬</span>
-              <span>会话</span>
-            </span>
+        <NavItem
+          icon="💬"
+          label="会话"
+          active={currentView === "session"}
+          onClick={() => setCurrentView("session")}
+        />
 
-            <span className="flex items-center gap-1.5 shrink-0">
-              {selectMode ? (
-                <>
-                  <button
-                    onClick={exitBatchMode}
-                    className="text-neutral-500 hover:text-white text-xs transition-colors px-1"
-                    title="取消"
-                  >
-                    ✕
-                  </button>
-                  <button
-                    onClick={selectAll}
-                    className="text-blue-400 hover:text-blue-300 text-xs transition-colors px-1"
-                  >
-                    {selectedIds.size === sessions.length ? "取消全选" : "全选"}
-                  </button>
-                  <button
-                    onClick={handleBatchDelete}
-                    disabled={selectedIds.size === 0}
-                    className="text-red-400 hover:text-red-300 disabled:opacity-30 text-xs transition-colors px-1"
-                  >
-                    删除({selectedIds.size})
-                  </button>
-                </>
-              ) : (
-                sessionsExpanded && sessions.length > 0 && (
-                  <button
-                    onClick={enterBatchMode}
-                    className="opacity-0 group-hover:opacity-100 text-neutral-600 hover:text-neutral-300 text-xs transition-all"
-                    title="批量删除"
-                  >
-                    🗑
-                  </button>
-                )
-              )}
-
-              <span
-                className={`text-xs transition-transform duration-200 cursor-pointer ${
-                  sessionsExpanded ? "rotate-0" : "-rotate-90"
-                }`}
-                onClick={toggleSessionsExpanded}
-              >
-                ▾
-              </span>
-            </span>
-          </div>
-
-          {sessionsExpanded && (
-            <SessionSubMenu
-              selectMode={selectMode}
-              selectedIds={selectedIds}
-              setSelectedIds={setSelectedIds}
-            />
-          )}
-        </div>
-
-        {/* 定时任务 */}
         <NavItem
           icon="⏰"
           label="定时任务"
@@ -164,7 +57,7 @@ export function Navigation() {
           onClick={() => setCurrentView("tasks")}
         />
 
-        {/* 日志 — 可折叠子菜单 */}
+        {/* 日志 — 折叠子菜单 */}
         <div>
           <button
             onClick={() => setLogsExpanded(!logsExpanded)}
@@ -185,24 +78,30 @@ export function Navigation() {
             </span>
           </button>
 
-          {/* 日志子菜单 */}
           {logsExpanded && (
             <div className="ml-4 mt-1.5 pl-3 border-l-2 border-neutral-800 space-y-0.5">
               <LogSubItem
                 icon="📊"
                 label="系统日志"
-                active={currentView === "logs" && logSubView === "system"}
+                active={currentView === "logs" && useAppStore.getState().logSubView === "system"}
                 onClick={() => handleLogClick("system")}
               />
               <LogSubItem
                 icon="📝"
                 label="任务日志"
-                active={currentView === "logs" && logSubView === "task-runs"}
+                active={currentView === "logs" && useAppStore.getState().logSubView === "task-runs"}
                 onClick={() => handleLogClick("task-runs")}
               />
             </div>
           )}
         </div>
+
+        <NavItem
+          icon="⚙️"
+          label="配置"
+          active={currentView === "config"}
+          onClick={() => setCurrentView("config")}
+        />
       </nav>
 
       {/* 底部版本号 */}

@@ -7,7 +7,7 @@ import { resolve } from "path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
-import { getConfig, getModelById } from "./config.js";
+import { getConfig, getModelById, getApiKeyByModelId } from "./config.js";
 import { getLogger } from "./logger.js";
 import { tools } from "../tools/index.js";
 
@@ -51,14 +51,18 @@ export function getOrCreateAgent(
   if (existing) {
     // 模型热切换：如果模型变了，更新 Agent 的 model
     if (existing.state.model?.id !== model.id) {
+      getLogger().info("agent", `模型热切换: ${existing.state.model?.id} → ${model.id}`, { sessionId });
       existing.state.model = model;
+    } else {
+      getLogger().debug("agent", `Agent 复用，模型不变: ${model.id}`, { sessionId });
     }
     return existing;
   }
 
+  getLogger().info("agent", `创建新 Agent，模型: ${model.id}`, { sessionId });
+
 
   const config = getConfig();
-  const apiKey = config.llm.api_key;
 
   // 使用配置的 thinking level；模型不支持 thinking 时降级为 off
   let thinkingLevel = config.llm.thinking_level || "off";
@@ -67,15 +71,22 @@ export function getOrCreateAgent(
     thinkingLevel = "off";
   }
 
-  const agent = new Agent({
+  let agent: Agent;
+  agent = new Agent({
     initialState: {
       systemPrompt: systemPrompt || loadSystemPrompt(),
       model,
       tools: tools as any,
       thinkingLevel,
     },
-    getApiKey: () => apiKey,
+    // 动态获取 apiKey：模型切换时 key 也要跟着变
+    getApiKey: (): string => getApiKeyByModelId(agent.state.model?.id),
     toolExecution: "parallel",
+    // 请求 payload 日志：确认实际发给 LLM 的 model 字段
+    onPayload: (params: any) => {
+      getLogger().info("llm", `请求 payload model=${params.model}, messages=${params.messages?.length || 0} 条`, { sessionId });
+      return params;
+    },
   });
 
   agents.set(sessionId, agent);

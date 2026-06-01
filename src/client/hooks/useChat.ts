@@ -10,6 +10,7 @@ export function useChat() {
     isStreaming,
     currentSessionId,
     sendMessage,
+    regenerateMessage,
     abortChat,
     currentText,
     currentThinking,
@@ -24,6 +25,11 @@ export function useChat() {
     [isStreaming, sendMessage]
   );
 
+  const regenerate = useCallback(async () => {
+    if (isStreaming) return;
+    await regenerateMessage();
+  }, [isStreaming, regenerateMessage]);
+
   const abort = useCallback(() => {
     abortChat();
   }, [abortChat]);
@@ -33,6 +39,7 @@ export function useChat() {
     isStreaming,
     currentSessionId,
     send,
+    regenerate,
     abort,
     // 流式渲染用
     streamingText: currentText,

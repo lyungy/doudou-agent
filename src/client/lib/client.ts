@@ -343,3 +343,16 @@ export async function fetchStatsPerformance(days = 7): Promise<PerformanceStats>
 export async function fetchStatsErrors(days = 7): Promise<ErrorStats> {
   return request(`/stats/errors?days=${days}`);
 }
+
+// ============ System Prompt API ============
+
+export async function fetchSystemPrompt(): Promise<{ content: string }> {
+  return request("/config/system-prompt");
+}
+
+export async function saveSystemPrompt(content: string): Promise<{ ok: boolean; message: string }> {
+  return request("/config/system-prompt", {
+    method: "PUT",
+    body: JSON.stringify({ content }),
+  });
+}

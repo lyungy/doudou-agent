@@ -6,7 +6,7 @@ import { MessageBubble } from "./MessageBubble";
 import { useChat } from "../../hooks/useChat";
 
 export function MessageList() {
-  const { messages, isStreaming } = useChat();
+  const { messages, isStreaming, regenerate } = useChat();
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,19 +40,25 @@ export function MessageList() {
     );
   }
 
+  // 找到最后一条 assistant 消息的 id
+  const lastAssistantId = [...messages].reverse().find((m) => m.type === "assistant")?.id;
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-6">
         {messages.map((msg) => {
-          const isLastAssistant =
-            msg.type === "assistant" && isStreaming;
+          const isLastAssistant = msg.type === "assistant" && msg.id === lastAssistantId;
+          const isStreamingThis = isLastAssistant && isStreaming;
 
           return (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              isStreaming={isLastAssistant}
-            />
+            <div key={msg.id} className="group">
+              <MessageBubble
+                message={msg}
+                isStreaming={isStreamingThis}
+                canRegenerate={isLastAssistant && !isStreaming}
+                onRegenerate={regenerate}
+              />
+            </div>
           );
         })}
         <div ref={endRef} />

@@ -19,8 +19,18 @@ interface AppState {
   // 视图状态
   currentView: MainView;
   setCurrentView: (view: MainView) => void;
-  sessionsExpanded: boolean;
-  toggleSessionsExpanded: () => void;
+
+  // 会话搜索/筛选
+  sessionSearch: string;
+  setSessionSearch: (q: string) => void;
+  sessionFilter: "all" | "today" | "week" | "month";
+  setSessionFilter: (f: "all" | "today" | "week" | "month") => void;
+
+  // 系统提示词
+  systemPrompt: string;
+  loadingSystemPrompt: boolean;
+  loadSystemPrompt: () => Promise<void>;
+  saveSystemPrompt: (content: string) => Promise<void>;
 
   // 日志子视图
   logSubView: LogSubView;
@@ -71,6 +81,7 @@ interface AppState {
   deleteSessions: (ids: string[]) => Promise<void>;
   renameSession: (id: string, title: string) => Promise<void>;
   sendMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>;
+  regenerateMessage: () => Promise<void>;
   abortChat: () => void;
 
   // 内部方法
@@ -102,8 +113,29 @@ export const useAppStore = create<AppState>((set, get) => ({
   // 视图状态
   currentView: "home" as MainView,
   setCurrentView: (view) => set({ currentView: view }),
-  sessionsExpanded: false,
-  toggleSessionsExpanded: () => set((s) => ({ sessionsExpanded: !s.sessionsExpanded })),
+
+  // 会话搜索/筛选
+  sessionSearch: "",
+  setSessionSearch: (q) => set({ sessionSearch: q }),
+  sessionFilter: "all" as "all" | "today" | "week" | "month",
+  setSessionFilter: (f) => set({ sessionFilter: f }),
+
+  // 系统提示词
+  systemPrompt: "",
+  loadingSystemPrompt: false,
+  loadSystemPrompt: async () => {
+    set({ loadingSystemPrompt: true });
+    try {
+      const data = await api.fetchSystemPrompt();
+      set({ systemPrompt: data.content, loadingSystemPrompt: false });
+    } catch {
+      set({ loadingSystemPrompt: false });
+    }
+  },
+  saveSystemPrompt: async (content: string) => {
+    await api.saveSystemPrompt(content);
+    set({ systemPrompt: content });
+  },
 
   // 日志子视图
   logSubView: "system" as LogSubView,
@@ -196,7 +228,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loadingModels: true });
     try {
       const { models, thinkingLevel } = await api.fetchModels();
-      const currentModelId = models[0]?.id || "";
+      // 保留用户已选择的模型，仅在首次加载时默认选第一个
+      const prevModelId = get().currentModelId;
+      const currentModelId = prevModelId && models.some((m) => m.id === prevModelId)
+        ? prevModelId
+        : models[0]?.id || "";
       const validLevels = ["off", "minimal", "low", "medium", "high", "xhigh"];
       const tl = validLevels.includes(thinkingLevel) ? thinkingLevel as ThinkingLevel : "off" as ThinkingLevel;
       set({ models, currentModelId, thinkingLevel: tl, loadingModels: false });
@@ -232,7 +268,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       sessions: [session, ...state.sessions],
       currentSessionId: session.id,
       currentView: "chat" as MainView,
-      sessionsExpanded: true,
       messages: [],
     }));
     return session;
@@ -395,6 +430,27 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ isStreaming: false, streamingMessageId: null });
       }
     }
+  },
+
+  regenerateMessage: async () => {
+    const { messages, isStreaming } = get();
+    if (isStreaming) return;
+
+    // 找到最后一条 user 消息
+    const lastUserIdx = [...messages].reverse().findIndex((m) => m.type === "user");
+    if (lastUserIdx === -1) return;
+    const lastUserMsg = messages[messages.length - 1 - lastUserIdx];
+
+    // 移除最后一条 assistant 消息（如果有）
+    const trimmed = [...messages];
+    while (trimmed.length > 0 && trimmed[trimmed.length - 1].type === "assistant") {
+      trimmed.pop();
+    }
+
+    set({ messages: trimmed });
+
+    // 重新发送最后一条 user 消息
+    await get().sendMessage(lastUserMsg.content, lastUserMsg.images);
   },
 
   abortChat: () => {

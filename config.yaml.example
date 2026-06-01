@@ -1,36 +1,59 @@
 llm:
-  provider: openai
-  api_key: sk-you-api-key-here
-  base_url: https://api.openai.com/v1
-  temperature: 0.7
   thinking_level: medium   # off | minimal | low | medium | high | xhigh
+  temperature: 0.7
 
-  models:
-    - id: gpt-4o
-      name: GPT-4o
-      reasoning: false
-      input: ["text"]
-      contextWindow: 128000
-      maxTokens: 4096
+  providers:
+    # Provider 1: MiMo
+    - name: MiMo
+      provider: openai                          # API 协议（openai 兼容）
+      api_key: sk-your-mimo-key
+      base_url: https://token-plan-cn.xiaomimimo.com/v1
+      models:
+        - id: mimo-v2.5-pro
+          name: MiMo v2.5 Pro
+          reasoning: true
+          input: ["text"]
+          contextWindow: 1048576
+          maxTokens: 64000
 
-    # - id: deepseek-chat
-    #   name: DeepSeek Chat
-    #   reasoning: false
-    #   input: ["text"]
-    #   contextWindow: 64000
-    #   maxTokens: 4096
+        - id: mimo-v2.5
+          name: MiMo v2.5
+          reasoning: true
+          input: ["text", "image"]
+          contextWindow: 262144
+          maxTokens: 32000
 
-    # - id: mimo-v2.5-pro
-    #   name: MiMo v2.5 Pro
-    #   reasoning: true
-    #   input: ["text"]
-    #   contextWindow: 1048576
-    #   maxTokens: 64000
+    # Provider 2: DeepSeek（取消注释即可启用）
+    # - name: DeepSeek
+    #   provider: openai
+    #   api_key: sk-your-deepseek-key
+    #   base_url: https://api.deepseek.com/v1
+    #   models:
+    #     - id: deepseek-chat
+    #       name: DeepSeek Chat
+    #       reasoning: false
+    #       input: ["text"]
+    #       contextWindow: 64000
+    #       maxTokens: 4096
+
+    # Provider 3: 本地 Ollama
+    # - name: Ollama
+    #   provider: openai
+    #   api_key: ollama
+    #   base_url: http://localhost:11434/v1
+    #   models:
+    #     - id: llama3
+    #       name: Llama 3
+    #       reasoning: false
+    #       input: ["text"]
+    #       contextWindow: 8192
+    #       maxTokens: 4096
 
 # 存储配置
 storage:
-  data_dir: ./.doudou        # 数据目录，支持相对路径或绝对路径（如 ~/.doudou）
+  data_dir: ./.doudou
 
+# 服务器配置
 server:
   port: 3000
 

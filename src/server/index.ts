@@ -7,7 +7,7 @@
 import express from "express";
 import { resolve, isAbsolute } from "path";
 import type { AppConfig } from "./services/config.js";
-import { loadConfig } from "./services/config.js";
+import { loadConfig, listModels } from "./services/config.js";
 import { initStorage } from "./services/session.js";
 import { initLogger, getLogger } from "./services/logger.js";
 import { initLLMTracker } from "./services/llm-tracker.js";
@@ -96,7 +96,8 @@ export function startServer(config: AppConfig): void {
   app.listen(port, () => {
     const logger = getLogger();
     logger.info("system", `Doudou Agent 运行在 http://localhost:${port}`, { port });
-    logger.info("system", `LLM: ${config.llm.models[0]?.id || "(无模型)"} @ ${config.llm.base_url}`);
+    const allModels = listModels();
+    logger.info("system", `LLM: ${allModels.length} 个模型，${config.llm.providers.length} 个 provider`);
     logger.info("system", `日志目录: ${resolveLogDir(config.logging)}`);
   });
 }

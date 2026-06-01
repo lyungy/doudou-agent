@@ -99,8 +99,10 @@ router.post("/stream", async (req: Request, res: Response) => {
 
   try {
     const model = getModelById(modelId || sessionMeta.modelId || undefined);
+    logger.debug("sse", `解析模型: ${model.id} (请求modelId=${modelId}, sessionModelId=${sessionMeta.modelId})`, { sessionId });
     const agent = getOrCreateAgent(sessionId, model);
     agentInstance = agent;
+    logger.info("sse", `Agent 实际模型: ${agent.state.model?.id}`, { sessionId });
 
     // 支持请求级 thinkingLevel 覆盖
     if (thinkingLevel && typeof thinkingLevel === "string") {

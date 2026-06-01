@@ -17,9 +17,6 @@ export async function configShow(): Promise<void> {
 
   const headers = ["配置项", "值"];
   const rows = [
-    ["LLM Provider", config.llm.provider],
-    ["API Base URL", config.llm.base_url],
-    ["API Key", maskApiKey(config.llm.api_key)],
     ["Temperature", String(config.llm.temperature ?? "默认")],
     ["Thinking Level", config.llm.thinking_level],
     ["Server Port", String(config.server.port)],
@@ -28,19 +25,22 @@ export async function configShow(): Promise<void> {
     ["日志级别", config.logging.level],
     ["日志保留天数", String(config.logging.max_days)],
   ];
-
   printTable(headers, rows);
 
-  // 模型列表
-  console.log(bold("\n📦 模型列表\n"));
-  const modelHeaders = ["ID", "名称", "Reasoning", "Max Tokens"];
-  const modelRows = config.llm.models.map((m) => [
-    m.id,
-    m.name,
-    m.reasoning ? "✓" : "-",
-    String(m.maxTokens || 4096),
-  ]);
-  printTable(modelHeaders, modelRows);
+  // Provider 列表
+  for (const p of config.llm.providers) {
+    console.log(bold(`\n🔗 Provider: ${p.name}`));
+    console.log(dim(`  API: ${p.provider} @ ${p.base_url}`));
+    console.log(dim(`  Key: ${maskApiKey(p.api_key)}`));
+    const modelHeaders = ["ID", "名称", "Reasoning", "Max Tokens"];
+    const modelRows = p.models.map((m: any) => [
+      m.id,
+      m.name,
+      m.reasoning ? "✓" : "-",
+      String(m.maxTokens || 4096),
+    ]);
+    printTable(modelHeaders, modelRows);
+  }
 
   console.log("");
 }

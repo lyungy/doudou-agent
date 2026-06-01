@@ -1,10 +1,18 @@
 /**
- * 配置路由：获取和更新 LLM 配置
+ * 配置路由：获取和更新 LLM 配置 + 系统提示词
  */
 import { Router } from "express";
-import { getConfig, saveConfig, listModels, type AppConfig } from "../services/config.js";
+import { getConfig, saveConfig, listModels, readSystemPrompt, writeSystemPrompt, type AppConfig, type ProviderConfig } from "../services/config.js";
 
 const router = Router();
+
+/** 隐藏 provider 中的 api_key */
+function maskProviders(providers: ProviderConfig[]) {
+  return providers.map((p) => ({
+    ...p,
+    api_key: p.api_key ? "••••••" + p.api_key.slice(-4) : "",
+  }));
+}
 
 /**
  * GET /api/config
@@ -13,12 +21,11 @@ const router = Router();
 router.get("/", (req, res) => {
   try {
     const config = getConfig();
-    // 隐藏敏感信息
     const safeConfig = {
       ...config,
       llm: {
         ...config.llm,
-        api_key: config.llm.api_key ? "••••••" + config.llm.api_key.slice(-4) : "",
+        providers: maskProviders(config.llm.providers),
       },
     };
     res.json(safeConfig);
@@ -37,16 +44,23 @@ router.put("/", (req, res) => {
     const current = getConfig();
 
     const newConfig: AppConfig = {
-      llm: { ...current.llm, ...updates.llm },
+      llm: {
+        ...current.llm,
+        ...updates.llm,
+        // 保留掩码 api_key 的 provider 原值
+        providers: updates.llm?.providers
+          ? updates.llm.providers.map((p: any, i: number) => ({
+              ...p,
+              api_key: (p.api_key && p.api_key.startsWith("••••••"))
+                ? current.llm.providers[i]?.api_key || p.api_key
+                : p.api_key,
+            }))
+          : current.llm.providers,
+      },
       storage: { ...current.storage, ...updates.storage },
       server: { ...current.server, ...updates.server },
       logging: { ...current.logging, ...(updates as any).logging },
     };
-
-    // 如果 api_key 是掩码，保留原值
-    if (newConfig.llm.api_key && newConfig.llm.api_key.startsWith("••••••")) {
-      newConfig.llm.api_key = current.llm.api_key;
-    }
 
     saveConfig(newConfig);
     res.json({ ok: true, message: "配置已保存，重启后生效" });
@@ -63,10 +77,42 @@ router.get("/models", (req, res) => {
   try {
     const config = getConfig();
     const models = listModels();
+    // 返回给前端时隐藏 apiKey 和 baseUrl（前端不需要）
+    const safeModels = models.map(({ apiKey, baseUrl, ...rest }) => rest);
     res.json({
-      models,
+      models: safeModels,
       thinkingLevel: config.llm.thinking_level || "off",
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/config/system-prompt
+ * 读取系统提示词（AGENT.md）
+ */
+router.get("/system-prompt", (req, res) => {
+  try {
+    const content = readSystemPrompt();
+    res.json({ content });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/config/system-prompt
+ * 保存系统提示词（AGENT.md）
+ */
+router.put("/system-prompt", (req, res) => {
+  try {
+    const { content } = req.body;
+    if (typeof content !== "string") {
+      return res.status(400).json({ error: "content 必须是字符串" });
+    }
+    writeSystemPrompt(content);
+    res.json({ ok: true, message: "系统提示词已保存，新建会话后生效" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

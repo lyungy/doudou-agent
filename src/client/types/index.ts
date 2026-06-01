@@ -38,6 +38,7 @@ export interface ModelDef {
   input?: string[];
   contextWindow?: number;
   maxTokens?: number;
+  providerName?: string;  // 所属 provider 名称（如 "MiMo"、"DeepSeek"）
 }
 
 /** 图片内容（多模态） */
@@ -57,7 +58,7 @@ export interface PendingImage {
 }
 
 /** 视图类型 */
-export type MainView = "home" | "chat" | "tasks" | "logs";
+export type MainView = "home" | "chat" | "session" | "tasks" | "logs" | "config";
 
 /** 日志子视图 */
 export type LogSubView = "system" | "task-runs";

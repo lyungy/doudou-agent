@@ -8,10 +8,12 @@ import { HomePage } from "./components/HomePage";
 import { MessageList } from "./components/Chat/MessageList";
 import { InputBox } from "./components/Chat/InputBox";
 import { ModelSelector } from "./components/Config/ModelSelector";
+import { SystemPromptEditor } from "./components/Config/SystemPromptEditor";
 import { LLMStatusBar } from "./components/Chat/LLMStatusBar";
 import { LogPanel } from "./components/Logs/LogPanel";
 import { TaskPanel } from "./components/Tasks/TaskPanel";
 import { TaskLogList } from "./components/Tasks/TaskLogList";
+import { SessionList } from "./components/SessionManager/SessionList";
 
 export default function App() {
   const { currentView, currentSessionId, logSubView } = useAppStore();
@@ -23,29 +25,46 @@ export default function App() {
 
       {/* 右侧内容区 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 顶栏 */}
-        <TopBar />
-
-        {/* 内容区 */}
-        {currentView === "home" && <HomePage />}
+        {/* 首页/对话视图需要顶栏 */}
+        {currentView === "home" && (
+          <>
+            <TopBar />
+            <HomePage />
+          </>
+        )}
 
         {currentView === "chat" && (
-          currentSessionId ? (
-            <>
-              <MessageList />
-              <LLMStatusBar />
-              <InputBox />
-            </>
-          ) : (
-            <EmptyChatHint />
-          )
+          <>
+            <TopBar />
+            {currentSessionId ? (
+              <>
+                <MessageList />
+                <LLMStatusBar />
+                <InputBox />
+              </>
+            ) : (
+              <EmptyChatHint />
+            )}
+          </>
         )}
 
-        {currentView === "tasks" && <TaskPanel />}
+        {currentView === "session" && <SessionList />}
+
+        {currentView === "tasks" && (
+          <>
+            <TopBar />
+            <TaskPanel />
+          </>
+        )}
 
         {currentView === "logs" && (
-          logSubView === "task-runs" ? <TaskLogList /> : <LogPanel />
+          <>
+            <TopBar />
+            {logSubView === "task-runs" ? <TaskLogList /> : <LogPanel />}
+          </>
         )}
+
+        {currentView === "config" && <SystemPromptEditor />}
       </div>
     </div>
   );

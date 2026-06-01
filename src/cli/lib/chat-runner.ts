@@ -8,6 +8,7 @@ import { resolve } from "path";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { AppConfig, ModelDef } from "../../server/services/config.js";
+import { getApiKeyByModelId } from "../../server/services/config.js";
 import { getModelById, listModels } from "../../server/services/config.js";
 import { createSession, openSession, updateSession } from "../../server/services/session.js";
 import { tools } from "../../server/tools/index.js";
@@ -147,8 +148,8 @@ export async function runChat(options: ChatOptions, config: AppConfig): Promise<
   const modelId = options.modelId;
   const model = getModelById(modelId);
 
-  // 获取 API Key
-  const apiKey = config.llm.api_key;
+  // 获取 API Key（从模型所属 provider 取）
+  const apiKey = getApiKeyByModelId(model.id);
 
   // Thinking level
   let thinkingLevel = config.llm.thinking_level || "off";
