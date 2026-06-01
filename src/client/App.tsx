@@ -3,12 +3,15 @@
  * 左侧导航栏 + 右侧内容区（按 currentView 联动）
  */
 import { useAppStore } from "./store";
+import { useState } from "react";
 import { Navigation } from "./components/Navigation/Navigation";
 import { HomePage } from "./components/HomePage";
 import { MessageList } from "./components/Chat/MessageList";
 import { InputBox } from "./components/Chat/InputBox";
 import { ModelSelector } from "./components/Config/ModelSelector";
 import { SystemPromptEditor } from "./components/Config/SystemPromptEditor";
+import { TemplateManager } from "./components/Config/TemplateManager";
+import { PromptTemplates } from "./components/Chat/PromptTemplates";
 import { LLMStatusBar } from "./components/Chat/LLMStatusBar";
 import { LogPanel } from "./components/Logs/LogPanel";
 import { TaskPanel } from "./components/Tasks/TaskPanel";
@@ -37,11 +40,7 @@ export default function App() {
           <>
             <TopBar />
             {currentSessionId ? (
-              <>
-                <MessageList />
-                <LLMStatusBar />
-                <InputBox />
-              </>
+              <ChatView />
             ) : (
               <EmptyChatHint />
             )}
@@ -64,7 +63,7 @@ export default function App() {
           </>
         )}
 
-        {currentView === "config" && <SystemPromptEditor />}
+        {currentView === "config" && <ConfigView />}
       </div>
     </div>
   );
@@ -95,6 +94,63 @@ function EmptyChatHint() {
         <div className="text-4xl mb-3">💬</div>
         <p className="text-neutral-400 text-sm">请在左侧选择一个会话，或新建对话</p>
       </div>
+    </div>
+  );
+}
+
+/** 对话视图 — 有 session 时：消息为空显示模板卡片，否则显示正常对话 */
+function ChatView() {
+  const { messages } = useAppStore();
+
+  if (messages.length === 0) {
+    return (
+      <>
+        <PromptTemplates />
+        <InputBox />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <MessageList />
+      <LLMStatusBar />
+      <InputBox />
+    </>
+  );
+}
+
+/** 配置视图 — tab 切换：配置 / 模板 / 系统提示词 */
+function ConfigView() {
+  const [tab, setTab] = useState<"config" | "templates" | "prompt">("templates");
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Tab 栏 */}
+      <div className="px-6 pt-4 bg-neutral-50">
+        <div className="flex gap-1 border-b border-neutral-200">
+          {([
+            { key: "templates" as const, label: "📋 模板" },
+            { key: "prompt" as const, label: "📄 系统提示词" },
+          ]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                tab === key
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-neutral-500 hover:text-neutral-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab 内容 */}
+      {tab === "templates" && <TemplateManager />}
+      {tab === "prompt" && <SystemPromptEditor />}
     </div>
   );
 }

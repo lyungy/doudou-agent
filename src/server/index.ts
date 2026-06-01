@@ -19,6 +19,8 @@ import chatRouter from "./routes/chat.js";
 import logsRouter from "./routes/logs.js";
 import tasksRouter from "./routes/tasks.js";
 import statsRouter from "./routes/stats.js";
+import templateRouter from "./routes/template.js";
+import { initTemplates } from "./services/template.js";
 
 /**
  * 解析日志目录（绝对路径直接用，相对路径基于 cwd）
@@ -52,6 +54,9 @@ export function createApp(config: AppConfig): express.Express {
   // 初始化存储（SQLite + JSONL）
   initStorage();
 
+  // 初始化提示词模板（建表在 initStorage 中完成）
+  initTemplates();
+
   // 创建 Express 应用
   const app = express();
   app.use(express.json({ limit: "20mb" }));
@@ -77,6 +82,7 @@ export function createApp(config: AppConfig): express.Express {
   app.use("/api/logs", logsRouter);
   app.use("/api/tasks", tasksRouter);
   app.use("/api/stats", statsRouter);
+  app.use("/api/templates", templateRouter);
 
   // 健康检查
   app.get("/api/health", (req, res) => {

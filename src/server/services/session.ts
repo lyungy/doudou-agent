@@ -88,6 +88,22 @@ export function initStorage(): void {
     // 列已存在，忽略
   }
 
+  // 创建 prompt_templates 表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS prompt_templates (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      icon TEXT NOT NULL DEFAULT '📝',
+      file_path TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '通用',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
+
   // 初始化 JSONL 仓库
   const fs = new NodeFileSystem(process.cwd());
   jsonlRepo = new JsonlSessionRepo({

@@ -1,7 +1,7 @@
 /**
  * API 请求封装
  */
-import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel, Task, TaskRun } from "../types";
+import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel, Task, TaskRun, PromptTemplate } from "../types";
 
 const BASE = "/api";
 
@@ -365,5 +365,54 @@ export async function saveSystemPrompt(content: string): Promise<{ ok: boolean; 
   return request("/config/system-prompt", {
     method: "PUT",
     body: JSON.stringify({ content }),
+  });
+}
+
+// ============ Templates API ============
+
+export async function fetchTemplates(enabledOnly = false): Promise<PromptTemplate[]> {
+  const qs = enabledOnly ? "?enabled=true" : "";
+  return request(`/templates${qs}`);
+}
+
+export async function fetchTemplate(id: string): Promise<PromptTemplate> {
+  return request(`/templates/${id}`);
+}
+
+export async function createTemplate(input: {
+  name: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  content?: string;
+}): Promise<PromptTemplate> {
+  return request("/templates", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateTemplate(id: string, input: {
+  name?: string;
+  description?: string;
+  icon?: string;
+  category?: string;
+  content?: string;
+  sortOrder?: number;
+}): Promise<PromptTemplate> {
+  return request(`/templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  await request(`/templates/${id}`, { method: "DELETE" });
+}
+
+export async function toggleTemplateEnabled(id: string, enabled: boolean): Promise<void> {
+  await request(`/templates/${id}/toggle`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
   });
 }

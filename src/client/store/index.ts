@@ -2,7 +2,7 @@
  * Zustand 全局状态管理
  */
 import { create } from "zustand";
-import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel, MainView, LogSubView, Task, TaskRun } from "../types";
+import type { SessionMeta, ChatMessage, ToolCallInfo, ModelDef, LLMRequestStatus, LLMStatusData, ThinkingLevel, MainView, LogSubView, Task, TaskRun, PromptTemplate } from "../types";
 import * as api from "../lib/client";
 
 interface AppState {
@@ -33,6 +33,12 @@ interface AppState {
   loadingSystemPrompt: boolean;
   loadSystemPrompt: () => Promise<void>;
   saveSystemPrompt: (content: string) => Promise<void>;
+
+  // 提示词模板
+  templates: PromptTemplate[];
+  loadingTemplates: boolean;
+  loadTemplates: () => Promise<void>;
+  sendTemplate: (template: PromptTemplate) => Promise<void>;
 
   // 日志子视图
   logSubView: LogSubView;
@@ -140,6 +146,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveSystemPrompt: async (content: string) => {
     await api.saveSystemPrompt(content);
     set({ systemPrompt: content });
+  },
+
+  // 提示词模板
+  templates: [],
+  loadingTemplates: false,
+  loadTemplates: async () => {
+    set({ loadingTemplates: true });
+    try {
+      const templates = await api.fetchTemplates(true);
+      set({ templates, loadingTemplates: false });
+    } catch {
+      set({ loadingTemplates: false });
+    }
+  },
+  sendTemplate: async (template: PromptTemplate) => {
+    // 读取模板内容后作为消息发送
+    try {
+      const full = await api.fetchTemplate(template.id);
+      if (full.content) {
+        await get().sendMessage(full.content);
+      }
+    } catch (err: any) {
+      console.error("发送模板失败:", err.message);
+    }
   },
 
   // 日志子视图

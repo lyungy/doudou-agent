@@ -43,6 +43,21 @@ export interface ModelDef {
   providerName?: string;  // 所属 provider 名称（如 "MiMo"、"DeepSeek"）
 }
 
+/** 提示词模板 */
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  filePath: string;
+  category: string;
+  enabled: number;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  content?: string;  // GET /:id 时返回
+}
+
 /** 图片内容（多模态） */
 export interface ImageContent {
   type: "image";
