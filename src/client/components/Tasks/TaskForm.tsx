@@ -3,7 +3,7 @@
  */
 import { useState, useEffect } from "react";
 import { useAppStore } from "../../store";
-import type { Task, TaskType } from "../../types";
+import type { Task, TaskType, ModelDef } from "../../types";
 
 interface Props {
   task?: Task | null;
@@ -11,7 +11,7 @@ interface Props {
 }
 
 export function TaskForm({ task, onClose }: Props) {
-  const { createTask, updateTask } = useAppStore();
+  const { createTask, updateTask, models } = useAppStore();
 
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
@@ -19,8 +19,16 @@ export function TaskForm({ task, onClose }: Props) {
   const [type, setType] = useState<TaskType>("recurring");
   const [timeout, setTimeout_] = useState(300);
   const [enabled, setEnabled] = useState(true);
+  const [modelId, setModelId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  // 默认选中第一个模型
+  useEffect(() => {
+    if (!task && models.length > 0 && !modelId) {
+      setModelId(models[0].id);
+    }
+  }, [models, task, modelId]);
 
   // 编辑模式填充
   useEffect(() => {
@@ -31,6 +39,7 @@ export function TaskForm({ task, onClose }: Props) {
       setType(task.type);
       setTimeout_(task.timeout);
       setEnabled(task.enabled);
+      setModelId(task.modelId || "");
     }
   }, [task]);
 
@@ -44,10 +53,11 @@ export function TaskForm({ task, onClose }: Props) {
 
     setSubmitting(true);
     try {
+      const selectedModelId = modelId || undefined;
       if (task) {
-        await updateTask(task.id, { name, prompt, cron, type, timeout, enabled });
+        await updateTask(task.id, { name, prompt, cron, type, timeout, enabled, modelId: selectedModelId });
       } else {
-        await createTask({ name, prompt, cron, type, timeout, enabled });
+        await createTask({ name, prompt, cron, type, timeout, enabled, modelId: selectedModelId });
       }
       onClose();
     } catch (err: any) {
@@ -127,6 +137,28 @@ export function TaskForm({ task, onClose }: Props) {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* 模型选择 */}
+          <div>
+            <label className="block text-sm font-medium text-neutral-700 mb-1">执行模型</label>
+            <select
+              value={modelId}
+              onChange={(e) => setModelId(e.target.value)}
+              className="w-full px-3 py-2 border border-neutral-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {models.length === 0 && <option value="">暂无可用模型</option>}
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.providerName ? `${m.providerName} / ${m.name}` : m.name}
+                </option>
+              ))}
+            </select>
+            {models.length > 0 && (
+              <p className="mt-1 text-xs text-neutral-400">
+                默认使用第一个模型，可在创建后修改
+              </p>
+            )}
           </div>
 
           {/* 类型 + 超时 */}

@@ -7,7 +7,7 @@ import type { Task } from "../../types";
 import { TaskForm } from "./TaskForm";
 
 export function TaskPanel() {
-  const { tasks, loadingTasks, loadTasks, deleteTask, toggleTask, triggerTask } = useAppStore();
+  const { tasks, loadingTasks, loadTasks, deleteTask, toggleTask, triggerTask, models } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
@@ -78,6 +78,7 @@ export function TaskPanel() {
               <TaskCard
                 key={task.id}
                 task={task}
+                models={models}
                 triggering={triggering === task.id}
                 onToggle={() => handleToggle(task)}
                 onEdit={() => handleEdit(task)}
@@ -98,6 +99,7 @@ export function TaskPanel() {
 /** 任务卡片 */
 function TaskCard({
   task,
+  models,
   triggering,
   onToggle,
   onEdit,
@@ -105,12 +107,18 @@ function TaskCard({
   onDelete,
 }: {
   task: Task;
+  models: { id: string; name: string; providerName?: string }[];
   triggering: boolean;
   onToggle: () => void;
   onEdit: () => void;
   onTrigger: () => void;
   onDelete: () => void;
 }) {
+  // 根据 modelId 查找模型显示名称
+  const modelDef = models.find((m) => m.id === task.modelId);
+  const modelLabel = modelDef
+    ? modelDef.providerName ? `${modelDef.providerName} / ${modelDef.name}` : modelDef.name
+    : task.modelId || "默认模型";
   const statusColor = task.enabled ? "bg-green-50 text-green-700" : "bg-neutral-100 text-neutral-500";
   const typeLabel = task.type === "once" ? "一次性" : "循环";
 
@@ -130,6 +138,7 @@ function TaskCard({
           </div>
           <p className="text-xs text-neutral-400 truncate mb-2">{task.prompt}</p>
           <div className="flex items-center gap-4 text-xs text-neutral-400">
+            <span>模型: <code className="bg-neutral-100 px-1 rounded">{modelLabel}</code></span>
             <span>Cron: <code className="bg-neutral-100 px-1 rounded">{task.cron}</code></span>
             <span>超时: {task.timeout}s</span>
             <span>已执行: {task.runCount} 次</span>
