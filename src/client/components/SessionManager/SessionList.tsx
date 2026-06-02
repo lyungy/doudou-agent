@@ -140,7 +140,7 @@ export function SessionList() {
   return (
     <div className="flex-1 flex flex-col bg-neutral-50 overflow-hidden">
       {/* 顶栏 */}
-      <div className="px-6 py-4 bg-white border-b border-neutral-200">
+      <div className="px-6 py-4 bg-white border-b border-neutral-200 overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-semibold text-neutral-800">会话管理</h1>
           <div className="flex items-center gap-2">
@@ -179,9 +179,9 @@ export function SessionList() {
         </div>
 
         {/* 搜索 + 内容搜索 toggle + 时间筛选 + 排序 */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {/* 搜索框 + 内容搜索 toggle */}
-          <div className="flex-1 relative">
+          <div className="flex-1 min-w-0 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 text-sm">🔍</span>
             <input
               type="text"
@@ -215,7 +215,7 @@ export function SessionList() {
           </div>
 
           {/* 时间筛选 */}
-          <div className="flex items-center gap-1 bg-neutral-100 rounded-lg p-0.5">
+          <div className="flex items-center gap-1 bg-neutral-100 rounded-lg p-0.5 shrink-0">
             {([
               { key: "all" as TimeFilter, label: "全部" },
               { key: "today" as TimeFilter, label: "今天" },
@@ -240,7 +240,7 @@ export function SessionList() {
           <select
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="px-3 py-2 text-xs bg-neutral-100 border border-neutral-200 rounded-lg outline-none focus:border-blue-400 text-neutral-600 cursor-pointer"
+            className="px-2 py-2 text-xs bg-neutral-100 border border-neutral-200 rounded-lg outline-none focus:border-blue-400 text-neutral-600 cursor-pointer shrink-0"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.key} value={opt.key}>
@@ -252,7 +252,7 @@ export function SessionList() {
       </div>
 
       {/* 列表区 */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4">
         {loadingSessions ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-neutral-400 text-sm">加载中...</div>
@@ -265,7 +265,7 @@ export function SessionList() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-2 max-w-3xl mx-auto">
+          <div className="grid gap-2 max-w-5xl mx-auto">
             {filteredSessions.map((session) => (
               <SessionItem
                 key={session.id}
