@@ -60,6 +60,7 @@ export function InputBox() {
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false); // 跟踪中文输入法组合状态
   const { send, abort, isStreaming } = useChat();
   const currentModelId = useAppStore((s) => s.currentModelId);
   const models = useAppStore((s) => s.models);
@@ -169,8 +170,22 @@ export function InputBox() {
     setInput("");
   };
 
+  // 输入法组合状态处理（解决中文输入法下 Enter 误发送问题）
+  // 注意：compositionend 在 keydown 之前触发，需要延迟重置状态
+  const handleCompositionStart = useCallback(() => {
+    isComposingRef.current = true;
+  }, []);
+
+  const handleCompositionEnd = useCallback(() => {
+    // 延迟重置，确保当前轮次的 keydown 能检测到组合状态
+    setTimeout(() => {
+      isComposingRef.current = false;
+    }, 20);
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // 只有在非输入法组合状态下，Enter 才发送消息
+    if (e.key === "Enter" && !e.shiftKey && !isComposingRef.current) {
       e.preventDefault();
       handleSubmit();
     }
@@ -224,6 +239,8 @@ export function InputBox() {
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onCompositionStart={handleCompositionStart}
+            onCompositionEnd={handleCompositionEnd}
             placeholder={pendingImages.length > 0 ? "添加描述... (可选)" : "输入消息... (Enter 发送，Shift+Enter 换行)"}
             className="w-full resize-none px-4 py-3.5 text-[14px] text-neutral-800 placeholder-neutral-400 focus:outline-none bg-transparent leading-relaxed"
             rows={1}
