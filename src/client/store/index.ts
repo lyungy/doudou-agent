@@ -16,6 +16,7 @@ interface AppState {
   sessions: SessionMeta[];
   currentSessionId: string | null;
   loadingSessions: boolean;
+  loadingSession: boolean;  // 单个会话消息加载中
 
   // 视图状态
   currentView: MainView;
@@ -123,6 +124,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
   currentSessionId: null,
   loadingSessions: false,
+  loadingSession: false,
 
   // 对话状态
   messages: [],
@@ -331,6 +333,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       currentSessionId: id,
       currentView: "chat" as MainView,
       messages: [],
+      loadingSession: true,
       currentModelId: session?.modelId || get().currentModelId,
     });
 
@@ -345,9 +348,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const rawMessages = await api.fetchSessionMessages(id);
       const messages = convertToChatMessages(rawMessages);
-      set({ messages });
+      set({ messages, loadingSession: false });
     } catch (err: any) {
       console.error("加载消息失败:", err.message);
+      set({ loadingSession: false });
     }
 
     // 检测 Agent 是否仍在流式中，自动重连 SSE
@@ -511,13 +515,20 @@ export const useAppStore = create<AppState>((set, get) => ({
           set({ isStreaming: false, streamingMessageId: null });
           // LLM 状态保留展示，下次发消息时清空
         },
-        onError: () => {
+        onError: (error) => {
+          // 无累积内容时，显示错误信息
+          if (!get().currentText) {
+            set({ currentText: `⚠️ 请求失败：${error || "未知错误"}` });
+          }
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });
         },
       }, abortController.signal, modelId || undefined, thinkingLevel, images);
     } catch (err: any) {
       if (err.name !== "AbortError") {
+        if (!get().currentText) {
+          set({ currentText: `⚠️ 请求失败：${err.message || "未知错误"}` });
+        }
         get()._commitAssistantMessage();
         set({ isStreaming: false, streamingMessageId: null });
       }
@@ -623,13 +634,19 @@ export const useAppStore = create<AppState>((set, get) => ({
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });
         },
-        onError: () => {
+        onError: (error) => {
+          if (!get().currentText) {
+            set({ currentText: `⚠️ 请求失败：${error || "未知错误"}` });
+          }
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });
         },
       }, abortController.signal);
     } catch (err: any) {
       if (err.name !== "AbortError") {
+        if (!get().currentText) {
+          set({ currentText: `⚠️ 请求失败：${err.message || "未知错误"}` });
+        }
         get()._commitAssistantMessage();
         set({ isStreaming: false, streamingMessageId: null });
       }
@@ -639,22 +656,33 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ============ 初始化 ============
 
   initApp: async () => {
-    // 1. 加载模型列表
-    await get().loadModels();
-    // 2. 加载会话列表
-    await get().loadSessions();
+    // 1. 加载模型列表（失败不影响后续）
+    try {
+      await get().loadModels();
+    } catch (err: any) {
+      console.error("加载模型列表失败:", err.message);
+    }
+    // 2. 加载会话列表（失败不影响后续）
+    try {
+      await get().loadSessions();
+    } catch (err: any) {
+      console.error("加载会话列表失败:", err.message);
+    }
     // 3. 从 URL 恢复会话状态
-    const urlSessionId = getSessionIdFromUrl();
-    if (urlSessionId) {
-      const { sessions } = get();
-      if (isValidSessionId(urlSessionId, sessions.map((s) => s.id))) {
-        // 有效会话 ID，恢复选中（不推送历史，因为当前就是 URL 来源）
-        await get().selectSession(urlSessionId, false);
-      } else {
-        // 无效会话 ID，清除 URL 参数
-        console.warn("URL 中的会话 ID 无效，已清除:", urlSessionId);
-        updateUrlWithSession(null);
+    try {
+      const urlSessionId = getSessionIdFromUrl();
+      if (urlSessionId) {
+        const { sessions } = get();
+        if (isValidSessionId(urlSessionId, sessions.map((s) => s.id))) {
+          await get().selectSession(urlSessionId, false);
+        } else {
+          console.warn("URL 中的会话 ID 无效，已清除:", urlSessionId);
+          updateUrlWithSession(null);
+        }
       }
+    } catch (err: any) {
+      console.error("恢复会话状态失败:", err.message);
+      updateUrlWithSession(null);
     }
   },
 

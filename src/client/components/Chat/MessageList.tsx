@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { useChat } from "../../hooks/useChat";
+import { useAppStore } from "../../store";
 
 export function MessageList() {
   const { messages, isStreaming, regenerate } = useChat();
@@ -27,12 +28,13 @@ export function MessageList() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-2">
             {["帮我写一段代码", "解释一下量子计算", "翻译这段文字"].map((hint) => (
-              <span
+              <button
                 key={hint}
-                className="px-3 py-1.5 bg-neutral-100 text-neutral-500 text-xs rounded-full"
+                onClick={() => useAppStore.getState().sendMessage(hint)}
+                className="px-3 py-1.5 bg-neutral-100 text-neutral-500 text-xs rounded-full hover:bg-blue-50 hover:text-blue-600 transition-colors cursor-pointer"
               >
                 {hint}
-              </span>
+              </button>
             ))}
           </div>
         </div>

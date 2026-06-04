@@ -79,7 +79,7 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
   }, [message.content]);
 
   return (
-    <div className={`flex gap-3 mb-2 ${isUser ? "justify-end" : "justify-start"}`}>
+    <div className={`group flex gap-3 mb-2 ${isUser ? "justify-end" : "justify-start"}`}>
       {/* AI 头像 */}
       {!isUser && (
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shrink-0 mt-0.5">

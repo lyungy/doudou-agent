@@ -124,9 +124,23 @@ function EmptyChatHint() {
   );
 }
 
-/** 对话视图 — 有 session 时：消息为空显示模板卡片，否则显示正常对话 */
+/** 对话视图 — 有 session 时：加载中显示骨架屏，空消息显示模板卡片，否则显示正常对话 */
 function ChatView() {
-  const { messages } = useAppStore();
+  const { messages, loadingSession } = useAppStore();
+
+  if (loadingSession) {
+    return (
+      <>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex items-center gap-2 text-neutral-400">
+            <span className="w-4 h-4 border-2 border-neutral-300 border-t-blue-500 rounded-full animate-spin" />
+            <span className="text-sm">加载消息中...</span>
+          </div>
+        </div>
+        <InputBox />
+      </>
+    );
+  }
 
   if (messages.length === 0) {
     return (

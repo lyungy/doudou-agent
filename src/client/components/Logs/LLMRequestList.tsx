@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { LLMRequestRecord } from "../../types";
 import * as api from "../../lib/client";
 import { Pagination } from "../common/Pagination";
-import { resolveTimeRange } from "./LogFilters";
+import { LLM_STATUS_COLORS, LLM_STATUS_LABELS, formatDuration, formatTime, resolveTimeRange } from "../../lib/utils";
 
 interface Props {
   sessionId?: string;
@@ -188,29 +188,11 @@ export function LLMRequestList({ sessionId }: Props) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { color: string; label: string }> = {
-    connecting: { color: "bg-blue-100 text-blue-700", label: "连接中" },
-    streaming: { color: "bg-green-100 text-green-700", label: "推理中" },
-    completed: { color: "bg-emerald-100 text-emerald-700", label: "完成" },
-    error: { color: "bg-red-100 text-red-700", label: "错误" },
-    aborted: { color: "bg-amber-100 text-amber-700", label: "中止" },
-  };
-  const c = config[status] || config.connecting;
+  const color = LLM_STATUS_COLORS[status] || LLM_STATUS_COLORS.connecting;
+  const label = LLM_STATUS_LABELS[status] || status;
   return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${c.color}`}>
-      {c.label}
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${color}`}>
+      {label}
     </span>
   );
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  const date = d.toLocaleDateString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit" });
-  const time = d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  return `${date} ${time}`;
 }

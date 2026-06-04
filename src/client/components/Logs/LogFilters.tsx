@@ -3,6 +3,10 @@
  * 支持按级别、模块、时间范围过滤
  */
 import type { LogLevel, LogModule } from "../../types";
+import { resolveTimeRange } from "../../lib/utils";
+
+// 重新导出，保持向后兼容
+export { resolveTimeRange };
 
 export interface LogFilterState {
   level: LogLevel | "";
@@ -73,19 +77,4 @@ export function LogFilters({ filter, onChange }: Props) {
   );
 }
 
-/**
- * 将时间范围快捷值转为 ISO 8601 时间戳
- */
-export function resolveTimeRange(since: string): string | undefined {
-  if (!since) return undefined;
-  const now = new Date();
-  const map: Record<string, number> = {
-    "5m": 5 * 60 * 1000,
-    "15m": 15 * 60 * 1000,
-    "1h": 60 * 60 * 1000,
-    "24h": 24 * 60 * 60 * 1000,
-  };
-  const ms = map[since];
-  if (!ms) return undefined;
-  return new Date(now.getTime() - ms).toISOString();
-}
+

@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAppStore } from "../../store";
 import * as api from "../../lib/client";
 import { Pagination } from "../common/Pagination";
-import { resolveTimeRange } from "../Logs/LogFilters";
+import { TASK_STATUS_COLORS, TASK_STATUS_LABELS, formatDuration, resolveTimeRange } from "../../lib/utils";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "全部状态" },
@@ -25,20 +25,6 @@ const TIME_OPTIONS: { value: string; label: string }[] = [
 ];
 
 /** 将时间范围快捷值转为 ISO 8601（扩展支持 7d/30d） */
-function resolveTaskTimeRange(since: string): string | undefined {
-  if (!since) return undefined;
-  const now = new Date();
-  const map: Record<string, number> = {
-    "1h": 60 * 60 * 1000,
-    "24h": 24 * 60 * 60 * 1000,
-    "7d": 7 * 24 * 60 * 60 * 1000,
-    "30d": 30 * 24 * 60 * 60 * 1000,
-  };
-  const ms = map[since];
-  if (!ms) return undefined;
-  return new Date(now.getTime() - ms).toISOString();
-}
-
 export function TaskLogList() {
   const { taskRuns, taskRunsTotal, loadingTaskRuns, loadTaskRuns } = useAppStore();
   const [page, setPage] = useState(1);
@@ -65,7 +51,7 @@ export function TaskLogList() {
   useEffect(() => {
     loadTaskRuns({
       status: status || undefined,
-      since: resolveTaskTimeRange(since),
+      since: resolveTimeRange(since),
       limit: pageSize,
       offset: (page - 1) * pageSize,
     });
@@ -80,26 +66,15 @@ export function TaskLogList() {
     loadStats();
   }, [loadStats]);
 
-  const statusColors: Record<string, string> = {
-    running: "bg-blue-50 text-blue-600",
-    success: "bg-green-50 text-green-600",
-    failed: "bg-red-50 text-red-600",
-    timeout: "bg-amber-50 text-amber-600",
-  };
-
-  const statusLabels: Record<string, string> = {
-    running: "执行中",
-    success: "成功",
-    failed: "失败",
-    timeout: "超时",
-  };
+  const statusColors = TASK_STATUS_COLORS;
+  const statusLabels = TASK_STATUS_LABELS;
 
   return (
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-200">
         <h2 className="text-lg font-semibold text-neutral-800">📋 任务日志</h2>
         <button
-          onClick={() => { loadTaskRuns({ status: status || undefined, since: resolveTaskTimeRange(since), limit: pageSize, offset: (page - 1) * pageSize }); loadStats(); }}
+          onClick={() => { loadTaskRuns({ status: status || undefined, since: resolveTimeRange(since), limit: pageSize, offset: (page - 1) * pageSize }); loadStats(); }}
           className="text-xs text-blue-600 hover:text-blue-800 transition-colors"
         >
           刷新
@@ -248,7 +223,4 @@ function StatCard({ label, value, color }: { label: string; value: string | numb
   );
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
+

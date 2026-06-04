@@ -5,9 +5,10 @@
 import { useState, useEffect, useCallback } from "react";
 import type { LogEntry } from "../../types";
 import * as api from "../../lib/client";
-import { LogFilters, resolveTimeRange, type LogFilterState } from "./LogFilters";
+import { LogFilters, type LogFilterState } from "./LogFilters";
 import { LLMRequestList } from "./LLMRequestList";
 import { Pagination } from "../common/Pagination";
+import { LOG_LEVEL_COLORS, LOG_MODULE_COLORS, resolveTimeRange } from "../../lib/utils";
 
 /** 标签页 */
 type TabType = "logs" | "llm";
@@ -145,20 +146,8 @@ export function LogPanel() {
 
 /** 日志行（表格行） */
 function LogRow({ entry }: { entry: LogEntry }) {
-  const levelColors: Record<string, string> = {
-    debug: "bg-neutral-100 text-neutral-500",
-    info: "bg-blue-50 text-blue-600",
-    warn: "bg-amber-50 text-amber-600",
-    error: "bg-red-50 text-red-600",
-  };
-
-  const moduleColors: Record<string, string> = {
-    http: "bg-purple-50 text-purple-600",
-    llm: "bg-cyan-50 text-cyan-600",
-    agent: "bg-green-50 text-green-600",
-    sse: "bg-orange-50 text-orange-600",
-    system: "bg-neutral-100 text-neutral-600",
-  };
+  const levelColors = LOG_LEVEL_COLORS;
+  const moduleColors = LOG_MODULE_COLORS;
 
   // 完整时间格式：2026-05-28 23:27:05.123
   const dt = new Date(entry.timestamp);
