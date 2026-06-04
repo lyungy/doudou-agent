@@ -68,9 +68,8 @@ export function MessageList() {
         const diff = prevScrollTopRef.current - currentTop; // > 0 表示往上滚
         prevScrollTopRef.current = currentTop;
 
-        // 只有 scrollTop 真正减小才算用户上拉
-        // 内容增长时 scrollTop 不变（diff ≈ 0），不会误触发
-        if (diff > 2 && !userScrolledRef.current) {
+        // scrollTop 真正减小 = 用户往上滚（内容增长时 scrollTop 不变）
+        if (diff > 0 && !userScrolledRef.current) {
           userScrolledRef.current = true;
           setShowScrollBtn(true);
         }
@@ -169,9 +168,9 @@ export function MessageList() {
         <div ref={endRef} />
       </div>
 
-      {/* 浮动「回到底部」按钮 */}
+      {/* 浮动「回到底部」按钮（sticky 固定在可视区域底部） */}
       {showScrollBtn && (
-        <div className="absolute bottom-4 left-0 right-0 flex justify-center z-10 pointer-events-none">
+        <div className="sticky bottom-4 flex justify-center z-10 pointer-events-none">
           <button
             onClick={() => scrollToBottom()}
             className="pointer-events-auto

@@ -1,8 +1,8 @@
 /**
- * Thinking 块组件（可折叠 + 流式自动展开）
+ * Thinking 块组件（可折叠 + 流式自动展开/结束后自动折叠）
  *
- * 优化：流式时默认折叠（减少 reflow 次数），完成时自动展开
- * 用户可随时手动切换
+ * 流式输出时：默认展开，实时显示思考过程
+ * 输出结束后：自动折叠，点击可手动展开/折叠
  */
 import { useState, useEffect, useRef } from "react";
 
@@ -13,26 +13,24 @@ interface Props {
 }
 
 export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
-  // 流式时折叠（减少高频 reflow），完成后展开
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const wasStreamingRef = useRef(false);
 
-  // 流式开始时折叠，流式结束时展开
+  // 流式中始终展开，结束后自动折叠
   useEffect(() => {
     if (isStreaming) {
       wasStreamingRef.current = true;
-      setExpanded(false);
-    } else if (wasStreamingRef.current) {
-      // 流式刚结束，自动展开
-      wasStreamingRef.current = false;
       setExpanded(true);
+    } else if (wasStreamingRef.current) {
+      wasStreamingRef.current = false;
+      setExpanded(false);
     }
   }, [isStreaming]);
 
   if (!content) return null;
 
   return (
-    <div className={`mb-2 ${isUser ? "" : ""}`}>
+    <div className="mb-2">
       <button
         onClick={() => setExpanded(!expanded)}
         className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full transition-all ${
