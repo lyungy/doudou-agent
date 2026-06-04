@@ -37,6 +37,8 @@ class LLMTracker {
   private completedIndex = 0;
   private idCounter = 0;
   private persistPath: string;
+  private diskCache: LLMRequestRecord[] | null = null;  // 磁盘缓存
+  private diskCacheValid = false;  // 缓存是否有效
 
   constructor(persistPath?: string) {
     this.persistPath = persistPath || join(process.cwd(), "logs", "llm-requests.jsonl");
@@ -276,6 +278,7 @@ class LLMTracker {
     try {
       const line = JSON.stringify(record) + "\n";
       appendFileSync(this.persistPath, line, "utf-8");
+      this.diskCacheValid = false;  // 新写入后缓存失效
     } catch {
       // 写入失败不影响主流程
     }
@@ -300,9 +303,14 @@ class LLMTracker {
   }
 
   /**
-   * 从 JSONL 文件加载历史记录
+   * 从 JSONL 文件加载历史记录（带内存缓存）
    */
   private loadFromDisk(): LLMRequestRecord[] {
+    // 缓存命中
+    if (this.diskCacheValid && this.diskCache) {
+      return this.diskCache;
+    }
+
     try {
       if (!existsSync(this.persistPath)) return [];
       const content = readFileSync(this.persistPath, "utf-8");
@@ -322,6 +330,11 @@ class LLMTracker {
       // 只取最后 BUFFER_SIZE 条
       this.completed = records.slice(-BUFFER_SIZE);
       this.completedIndex = this.completed.length % BUFFER_SIZE;
+
+      // 更新缓存
+      this.diskCache = records;
+      this.diskCacheValid = true;
+
       return records;
     } catch {
       return [];

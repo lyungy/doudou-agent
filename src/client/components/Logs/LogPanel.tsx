@@ -111,7 +111,11 @@ export function LogPanel() {
 
             {/* 日志列表 */}
             {entries.length === 0 ? (
-              <p className="text-sm text-neutral-400 py-8 text-center">暂无日志</p>
+              <div className="text-center py-8">
+                <div className="text-3xl mb-2">📋</div>
+                <p className="text-neutral-400 text-sm">暂无日志</p>
+                <p className="text-neutral-300 text-xs mt-1">系统运行后，日志会自动出现在这里</p>
+              </div>
             ) : (
               <>
                 <div className="overflow-x-auto">

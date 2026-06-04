@@ -163,7 +163,11 @@ export function TaskLogList() {
         {loadingTaskRuns ? (
           <p className="text-center text-neutral-400 py-8">加载中...</p>
         ) : taskRuns.length === 0 ? (
-          <p className="text-center text-neutral-400 py-8">暂无执行记录</p>
+          <div className="text-center py-8">
+            <div className="text-3xl mb-2">📝</div>
+            <p className="text-neutral-400 text-sm">暂无执行记录</p>
+            <p className="text-neutral-300 text-xs mt-1">在「定时任务」页面创建任务后，执行记录会出现在这里</p>
+          </div>
         ) : (
           <>
             <div className="overflow-x-auto">
