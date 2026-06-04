@@ -4,6 +4,7 @@
  * 状态 per-session，切换 session 自动切换显示
  */
 import { useAppStore } from "../../store";
+import { formatDuration } from "../../lib/utils";
 
 export function LLMStatusBar() {
   const currentSessionId = useAppStore((s) => s.currentSessionId);
@@ -79,8 +80,4 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-/** 格式化耗时 */
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
-}
+
