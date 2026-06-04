@@ -10,6 +10,7 @@ import { generateSessionUrl } from "../../lib/url";
 export function Navigation() {
   const { currentView, setCurrentView, createSession } = useAppStore();
   const [logsExpanded, setLogsExpanded] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const handleCreate = async (e?: React.MouseEvent) => {
     // Ctrl/Cmd + 点击 → 在新标签页打开新会话
@@ -27,16 +28,16 @@ export function Navigation() {
   };
 
   return (
-    <div className="w-52 bg-neutral-900 flex flex-col h-full">
-      {/* 新建对话 */}
+    <div className={`${collapsed ? "w-16" : "w-52"} bg-neutral-900 flex flex-col h-full transition-all duration-200`}>
+      {/* 新建对话 + 折叠按钮 */}
       <div className="px-3 pt-5 pb-4">
         <button
           onClick={(e) => handleCreate(e)}
-          className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2.5 rounded-xl transition-all active:scale-[0.98]"
-          title="Ctrl+点击在新标签页打开"
+          className={`w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium py-2.5 rounded-xl transition-all active:scale-[0.98] ${collapsed ? "px-0" : ""}`}
+          title={collapsed ? "新建对话" : "Ctrl+点击在新标签页打开"}
         >
           <span className="text-lg leading-none">+</span>
-          新建对话
+          {!collapsed && "新建对话"}
         </button>
       </div>
 
@@ -46,75 +47,102 @@ export function Navigation() {
       <nav className="flex-1 overflow-y-auto px-2 pt-4 pb-3 space-y-1.5">
         <NavItem
           icon="🏠"
-          label="首页"
+          label={collapsed ? "" : "首页"}
           active={currentView === "home"}
           onClick={() => setCurrentView("home")}
+          collapsed={collapsed}
         />
 
         <NavItem
           icon="💬"
-          label="会话"
+          label={collapsed ? "" : "会话"}
           active={currentView === "session"}
           onClick={() => setCurrentView("session")}
+          collapsed={collapsed}
         />
 
         <NavItem
           icon="⏰"
-          label="定时任务"
+          label={collapsed ? "" : "定时任务"}
           active={currentView === "tasks"}
           onClick={() => setCurrentView("tasks")}
+          collapsed={collapsed}
         />
 
         {/* 日志 — 折叠子菜单 */}
-        <div>
-          <button
-            onClick={() => setLogsExpanded(!logsExpanded)}
-            className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm transition-all duration-150 ${
-              currentView === "logs"
-                ? "bg-neutral-800 text-white"
-                : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
-            }`}
-          >
-            <span className="text-sm shrink-0">📋</span>
-            <span className="flex-1 text-left">日志</span>
-            <span
-              className={`text-xs transition-transform duration-200 ${
-                logsExpanded ? "rotate-0" : "-rotate-90"
+        {!collapsed ? (
+          <div>
+            <button
+              onClick={() => setLogsExpanded(!logsExpanded)}
+              className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm transition-all duration-150 ${
+                currentView === "logs"
+                  ? "bg-neutral-800 text-white"
+                  : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
               }`}
             >
-              ▾
-            </span>
-          </button>
+              <span className="text-sm shrink-0">📋</span>
+              <span className="flex-1 text-left">日志</span>
+              <span
+                className={`text-xs transition-transform duration-200 ${
+                  logsExpanded ? "rotate-0" : "-rotate-90"
+                }`}
+              >
+                ▾
+              </span>
+            </button>
 
-          {logsExpanded && (
-            <div className="ml-4 mt-1.5 pl-3 border-l-2 border-neutral-800 space-y-0.5">
-              <LogSubItem
-                icon="📊"
-                label="系统日志"
-                active={currentView === "logs" && useAppStore.getState().logSubView === "system"}
-                onClick={() => handleLogClick("system")}
-              />
-              <LogSubItem
-                icon="📝"
-                label="任务日志"
-                active={currentView === "logs" && useAppStore.getState().logSubView === "task-runs"}
-                onClick={() => handleLogClick("task-runs")}
-              />
-            </div>
-          )}
-        </div>
+            {logsExpanded && (
+              <div className="ml-4 mt-1.5 pl-3 border-l-2 border-neutral-800 space-y-0.5">
+                <LogSubItem
+                  icon="📊"
+                  label="系统日志"
+                  active={currentView === "logs" && useAppStore.getState().logSubView === "system"}
+                  onClick={() => handleLogClick("system")}
+                />
+                <LogSubItem
+                  icon="📝"
+                  label="任务日志"
+                  active={currentView === "logs" && useAppStore.getState().logSubView === "task-runs"}
+                  onClick={() => handleLogClick("task-runs")}
+                />
+              </div>
+            )}
+          </div>
+        ) : (
+          <NavItem
+            icon="📋"
+            label=""
+            active={currentView === "logs"}
+            onClick={() => handleLogClick("system")}
+            collapsed={collapsed}
+          />
+        )}
 
         <NavItem
           icon="⚙️"
-          label="配置"
+          label={collapsed ? "" : "配置"}
           active={currentView === "config"}
           onClick={() => setCurrentView("config")}
+          collapsed={collapsed}
         />
       </nav>
 
-      {/* 底部版本号 */}
-      <div className="px-3 py-3 border-t border-neutral-700/50 text-xs text-neutral-600">
-        Doudou Agent v0.1.0
+      {/* 底部：折叠按钮 + 版本号 */}
+      <div className="px-3 py-3 border-t border-neutral-700/50">
+        <button
+          onClick={() => setCollapsed(!collapsed)}
+          className="w-full flex items-center justify-center py-1.5 text-neutral-500 hover:text-neutral-300 transition-colors rounded-lg hover:bg-neutral-800/50 mb-2"
+          title={collapsed ? "展开导航" : "收起导航"}
+        >
+          <span className={`text-xs transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}>
+            ◀
+          </span>
+        </button>
+        {!collapsed && (
+          <div className="text-xs text-neutral-600 text-center">
+            Doudou Agent v0.1.0
+          </div>
+        )}
       </div>
     </div>
   );
@@ -126,23 +154,26 @@ function NavItem({
   label,
   active,
   onClick,
+  collapsed,
 }: {
   icon: string;
   label: string;
   active: boolean;
   onClick: () => void;
+  collapsed?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
+      title={collapsed ? label : undefined}
       className={`w-full flex items-center gap-2.5 px-3 py-3 rounded-xl text-sm transition-all duration-150 ${
         active
           ? "bg-neutral-800 text-white"
           : "text-neutral-400 hover:bg-neutral-800/60 hover:text-neutral-200"
-      }`}
+      } ${collapsed ? "justify-center" : ""}`}
     >
       <span className="text-sm shrink-0">{icon}</span>
-      <span>{label}</span>
+      {!collapsed && <span>{label}</span>}
     </button>
   );
 }

@@ -93,19 +93,51 @@ export function createApp(config: AppConfig): express.Express {
 }
 
 /**
- * 启动 HTTP 服务器
+ * 启动 HTTP 服务器（含优雅关停）
  */
 export function startServer(config: AppConfig): void {
   const app = createApp(config);
   const port = config.server.port;
 
-  app.listen(port, () => {
+  const server = app.listen(port, () => {
     const logger = getLogger();
     logger.info("system", `Doudou Agent 运行在 http://localhost:${port}`, { port });
     const allModels = listModels();
     logger.info("system", `LLM: ${allModels.length} 个模型，${config.llm.providers.length} 个 provider`);
     logger.info("system", `日志目录: ${resolveLogDir(config.logging)}`);
   });
+
+  // 优雅关停：清理资源
+  const shutdown = (signal: string) => {
+    const logger = getLogger();
+    logger.info("system", `收到 ${signal} 信号，正在优雅关停...`);
+
+    // 停止接受新连接
+    server.close(() => {
+      logger.info("system", "HTTP 服务器已关闭");
+
+      // 关闭 SQLite 连接
+      try {
+        const { getDb } = require("./services/session.js");
+        getDb().close();
+        logger.info("system", "SQLite 连接已关闭");
+      } catch {
+        // 未初始化则忽略
+      }
+
+      logger.info("system", "Doudou Agent 已停止");
+      process.exit(0);
+    });
+
+    // 超时强制退出
+    setTimeout(() => {
+      logger.warn("system", "关停超时，强制退出");
+      process.exit(1);
+    }, 5000);
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 // 直接运行时启动（兼容 npm run dev:server / tsx src/server/index.ts）

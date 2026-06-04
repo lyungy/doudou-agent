@@ -40,7 +40,7 @@ export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
         <div className={`mt-2 pl-3 border-l-2 ${
           isUser ? "border-white/30" : "border-purple-300"
         }`}>
-          <div className={`text-xs whitespace-pre-wrap max-h-40 overflow-y-auto leading-relaxed ${
+          <div className={`text-xs whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed ${
             isUser ? "text-white/70" : "text-neutral-500"
           }`}>
             {content}
