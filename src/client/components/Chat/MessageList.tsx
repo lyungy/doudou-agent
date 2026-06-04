@@ -1,13 +1,10 @@
 /**
  * 消息列表组件（智能滚动 + 回到底部按钮）
  *
- * 核心逻辑：
- * - 用 `userScrolled` ref 追踪用户是否主动上拉
- * - 用 `autoScrollAt` 时间戳区分程序滚动和用户滚动（debounce 150ms）
- * - 只在以下情况自动滚动：
- *   1. 新消息到达（消息数增加）
- *   2. 流式输出 + 用户未上拉
- * - 用户上拉后停止自动滚动，显示浮动按钮
+ * 核心规则：
+ * - userScrolledRef 一旦被设为 true，只有「回到底部」按钮能重置它
+ * - 流式内容增长会导致 distance-to-bottom 变化，不能用来判断用户意图
+ * - 新消息到达（messages.length 增加）时重置状态，自动跟到底部
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageBubble } from "./MessageBubble";
@@ -15,9 +12,7 @@ import { useChat } from "../../hooks/useChat";
 import { useAppStore } from "../../store";
 
 /** 距离底部多少 px 以内算「在底部」 */
-const BOTTOM_THRESHOLD = 80;
-/** 程序触发滚动后，忽略滚动事件的时间窗口 */
-const SCROLL_DEBOUNCE_MS = 150;
+const BOTTOM_THRESHOLD = 100;
 
 export function MessageList() {
   const { messages, isStreaming, regenerate } = useChat();
@@ -25,44 +20,41 @@ export function MessageList() {
   const endRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  // 用户是否主动上拉（ref，不触发重渲染）
+  // 用户是否主动上拉（一旦为 true，只有点按钮能重置）
   const userScrolledRef = useRef(false);
-  // 最近一次程序触发滚动的时间戳（用于区分程序滚动和用户滚动）
-  const autoScrollAtRef = useRef(0);
-  // 上一次消息数量（用于检测新消息到达）
+  // 上一次消息数量
   const prevCountRef = useRef(0);
 
-  /** 平滑滚动到底部（程序触发） */
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-    // 标记程序滚动时间
-    autoScrollAtRef.current = Date.now();
-    endRef.current?.scrollIntoView({ behavior });
+  /** 滚动到底部（仅按钮点击调用） */
+  const scrollToBottom = useCallback(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
     userScrolledRef.current = false;
     setShowScrollBtn(false);
   }, []);
 
-  /** 监听用户手动滚动（用 debounce 区分程序滚动和用户滚动） */
+  /** 监听滚动：只检测「用户上拉」，不检测「用户滚回」 */
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
+    let ticking = false;
+
     const handleScroll = () => {
-      // 程序触发的滚动，忽略
-      if (Date.now() - autoScrollAtRef.current < SCROLL_DEBOUNCE_MS) return;
+      if (ticking) return;
+      ticking = true;
 
-      // 用户手动滚动
-      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-      const isNear = dist < BOTTOM_THRESHOLD;
+      requestAnimationFrame(() => {
+        ticking = false;
+        // 已经是用户上拉状态，不再处理（只有按钮能重置）
+        if (userScrolledRef.current) return;
 
-      if (!isNear) {
-        // 用户上拉了
-        userScrolledRef.current = true;
-        setShowScrollBtn(true);
-      } else if (userScrolledRef.current) {
-        // 用户手动滚回底部
-        userScrolledRef.current = false;
-        setShowScrollBtn(false);
-      }
+        const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (dist > BOTTOM_THRESHOLD) {
+          // 用户上拉了
+          userScrolledRef.current = true;
+          setShowScrollBtn(true);
+        }
+      });
     };
 
     el.addEventListener("scroll", handleScroll, { passive: true });
@@ -75,18 +67,16 @@ export function MessageList() {
     const isNewMessage = newMsgCount > prevCountRef.current;
     prevCountRef.current = newMsgCount;
 
-    // 新消息到达：重置用户滚动状态（新对话开始，应该跟到底部）
+    // 新消息到达：重置状态，跟到底部
     if (isNewMessage) {
       userScrolledRef.current = false;
-      autoScrollAtRef.current = Date.now();
-      endRef.current?.scrollIntoView({ behavior: "instant" });
       setShowScrollBtn(false);
+      endRef.current?.scrollIntoView({ behavior: "instant" });
       return;
     }
 
     // 流式输出中 + 用户未上拉 → 自动滚动
     if (isStreaming && !userScrolledRef.current) {
-      autoScrollAtRef.current = Date.now();
       endRef.current?.scrollIntoView({ behavior: "instant" });
     }
   }, [messages, isStreaming]);
@@ -143,25 +133,27 @@ export function MessageList() {
         <div ref={endRef} />
       </div>
 
-      {/* 浮动「回到底部」按钮 */}
+      {/* 浮动「回到底部」按钮（sticky 固定在容器底部） */}
       {showScrollBtn && (
-        <button
-          onClick={() => scrollToBottom()}
-          className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10
-            flex items-center gap-1.5 px-4 py-2 rounded-full
-            bg-white/90 backdrop-blur-sm border border-neutral-200 shadow-lg
-            text-sm text-neutral-600 hover:text-neutral-800 hover:shadow-xl
-            transition-all duration-200 active:scale-95"
-          title="回到底部查看最新消息"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M12 5v14M19 12l-7 7-7-7" />
-          </svg>
-          <span>回到底部</span>
-          {isStreaming && (
-            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-          )}
-        </button>
+        <div className="sticky bottom-4 flex justify-center z-10 pointer-events-none">
+          <button
+            onClick={scrollToBottom}
+            className="pointer-events-auto
+              flex items-center gap-1.5 px-4 py-2 rounded-full
+              bg-white/90 backdrop-blur-sm border border-neutral-200 shadow-lg
+              text-sm text-neutral-600 hover:text-neutral-800 hover:shadow-xl
+              transition-all duration-200 active:scale-95"
+            title="回到底部查看最新消息"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M19 12l-7 7-7-7" />
+            </svg>
+            <span>回到底部</span>
+            {isStreaming && (
+              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
+            )}
+          </button>
+        </div>
       )}
     </div>
   );
