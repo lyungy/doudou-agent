@@ -1,10 +1,11 @@
 /**
  * 消息列表组件（智能滚动 + 回到底部按钮）
  *
- * 核心规则：
- * - userScrolledRef 一旦被设为 true，只有「回到底部」按钮能重置它
- * - 流式内容增长会导致 distance-to-bottom 变化，不能用来判断用户意图
- * - 新消息到达（messages.length 增加）时重置状态，自动跟到底部
+ * 核心设计：
+ * - 用 scrollTop 变化方向区分「用户上拉」和「内容增长」
+ *   只有 scrollTop 减小才算用户操作；内容增长时 scrollTop 不变
+ * - 用 scrollTo 替代 scrollIntoView，避免 reflow 时序竞争
+ * - userScrolled 一旦为 true，只有「回到底部」按钮或新消息能重置
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageBubble } from "./MessageBubble";
@@ -20,22 +21,39 @@ export function MessageList() {
   const endRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
-  // 用户是否主动上拉（一旦为 true，只有点按钮能重置）
+  // 用户是否主动上拉（一旦为 true，只有按钮点击或新消息能重置）
   const userScrolledRef = useRef(false);
-  // 上一次消息数量
+  // 上一次 scrollTop（用于判断滚动方向）
+  const prevScrollTopRef = useRef(0);
+  // 上一次消息数量（用于检测新消息到达）
   const prevCountRef = useRef(0);
 
-  /** 滚动到底部（仅按钮点击调用） */
-  const scrollToBottom = useCallback(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  /** 计算是否在底部附近 */
+  const checkNearBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD;
+  }, []);
+
+  /** 滚动到底部（用 scrollTo 替代 scrollIntoView，避免 reflow 竞争） */
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTo({
+      top: el.scrollHeight - el.clientHeight,
+      behavior,
+    });
     userScrolledRef.current = false;
     setShowScrollBtn(false);
   }, []);
 
-  /** 监听滚动：只检测「用户上拉」，不检测「用户滚回」 */
+  /** 监听滚动：用 scrollTop 方向判断用户意图 */
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
+
+    // 初始化 scrollTop
+    prevScrollTopRef.current = el.scrollTop;
 
     let ticking = false;
 
@@ -45,21 +63,29 @@ export function MessageList() {
 
       requestAnimationFrame(() => {
         ticking = false;
-        // 已经是用户上拉状态，不再处理（只有按钮能重置）
-        if (userScrolledRef.current) return;
 
-        const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (dist > BOTTOM_THRESHOLD) {
-          // 用户上拉了
+        const currentTop = el.scrollTop;
+        const diff = prevScrollTopRef.current - currentTop; // > 0 表示往上滚
+        prevScrollTopRef.current = currentTop;
+
+        // 只有 scrollTop 真正减小才算用户上拉
+        // 内容增长时 scrollTop 不变（diff ≈ 0），不会误触发
+        if (diff > 2 && !userScrolledRef.current) {
           userScrolledRef.current = true;
           setShowScrollBtn(true);
+        }
+
+        // 用户手动滚回底部 → 重置（允许自动跟随恢复）
+        if (userScrolledRef.current && checkNearBottom()) {
+          userScrolledRef.current = false;
+          setShowScrollBtn(false);
         }
       });
     };
 
     el.addEventListener("scroll", handleScroll, { passive: true });
     return () => el.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [checkNearBottom]);
 
   /** 自动滚动逻辑 */
   useEffect(() => {
@@ -71,13 +97,19 @@ export function MessageList() {
     if (isNewMessage) {
       userScrolledRef.current = false;
       setShowScrollBtn(false);
-      endRef.current?.scrollIntoView({ behavior: "instant" });
+      const el = containerRef.current;
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "instant" });
+      }
       return;
     }
 
     // 流式输出中 + 用户未上拉 → 自动滚动
     if (isStreaming && !userScrolledRef.current) {
-      endRef.current?.scrollIntoView({ behavior: "instant" });
+      const el = containerRef.current;
+      if (el) {
+        el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "instant" });
+      }
     }
   }, [messages, isStreaming]);
 
@@ -113,7 +145,11 @@ export function MessageList() {
   const lastAssistantId = [...messages].reverse().find((m) => m.type === "assistant")?.id;
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto relative">
+    <div
+      ref={containerRef}
+      className="flex-1 overflow-y-auto relative"
+      style={{ overflowAnchor: "auto" }}
+    >
       <div className="max-w-4xl mx-auto px-4 py-6">
         {messages.map((msg) => {
           const isLastAssistant = msg.type === "assistant" && msg.id === lastAssistantId;
@@ -133,11 +169,11 @@ export function MessageList() {
         <div ref={endRef} />
       </div>
 
-      {/* 浮动「回到底部」按钮（sticky 固定在容器底部） */}
+      {/* 浮动「回到底部」按钮 */}
       {showScrollBtn && (
-        <div className="sticky bottom-4 flex justify-center z-10 pointer-events-none">
+        <div className="absolute bottom-4 left-0 right-0 flex justify-center z-10 pointer-events-none">
           <button
-            onClick={scrollToBottom}
+            onClick={() => scrollToBottom()}
             className="pointer-events-auto
               flex items-center gap-1.5 px-4 py-2 rounded-full
               bg-white/90 backdrop-blur-sm border border-neutral-200 shadow-lg

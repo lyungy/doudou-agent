@@ -1,7 +1,10 @@
 /**
  * Thinking 块组件（可折叠 + 流式自动展开）
+ *
+ * 优化：流式时默认折叠（减少 reflow 次数），完成时自动展开
+ * 用户可随时手动切换
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Props {
   content: string;
@@ -10,14 +13,21 @@ interface Props {
 }
 
 export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
+  // 流式时折叠（减少高频 reflow），完成后展开
   const [expanded, setExpanded] = useState(false);
+  const wasStreamingRef = useRef(false);
 
-  // 流式输出时自动展开
+  // 流式开始时折叠，流式结束时展开
   useEffect(() => {
-    if (isStreaming && content) {
+    if (isStreaming) {
+      wasStreamingRef.current = true;
+      setExpanded(false);
+    } else if (wasStreamingRef.current) {
+      // 流式刚结束，自动展开
+      wasStreamingRef.current = false;
       setExpanded(true);
     }
-  }, [isStreaming, content]);
+  }, [isStreaming]);
 
   if (!content) return null;
 
