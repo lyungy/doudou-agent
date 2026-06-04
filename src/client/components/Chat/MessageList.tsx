@@ -1,11 +1,12 @@
 /**
  * 消息列表组件（智能滚动 + 回到底部按钮）
  *
- * 核心机制：autoScrollAt 时间戳 debounce
- * - 程序触发 scrollTo 前记录时间戳
- * - 滚动事件在 150ms 内 → 判定为程序滚动 → 忽略
- * - 超过 150ms 的滚动事件 → 判定为用户操作 → 检测方向
- * - scrollTop 减小 = 用户上拉 → 停止自动跟随
+ * 两个核心机制配合：
+ * 1. 限流：auto-scroll 最多 200ms 执行一次，避免连续覆盖用户手势
+ * 2. debounce：程序滚动后 150ms 内忽略 scroll 事件
+ *
+ * 用户手势检测窗口 = 200ms 限流间隔 - 150ms debounce = 50ms
+ * 但这 50ms 内用户手势可以被检测到 → 设 userScrolled → 停止自动跟随
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageBubble } from "./MessageBubble";
@@ -14,6 +15,7 @@ import { useAppStore } from "../../store";
 
 const BOTTOM_THRESHOLD = 100;
 const DEBOUNCE_MS = 150;
+const AUTO_SCROLL_THROTTLE_MS = 200;
 
 export function MessageList() {
   const { messages, isStreaming, regenerate } = useChat();
@@ -22,31 +24,25 @@ export function MessageList() {
 
   const userScrolledRef = useRef(false);
   const autoScrollAtRef = useRef(0);
+  const lastAutoScrollAtRef = useRef(0);
   const prevScrollTopRef = useRef(0);
   const prevCountRef = useRef(0);
 
+  /** 检测是否在底部附近 */
   const checkNearBottom = useCallback(() => {
     const el = containerRef.current;
     if (!el) return true;
     return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD;
   }, []);
 
-  /** 程序滚动到底部（记录时间戳供 debounce） */
-  const autoScrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
-    const el = containerRef.current;
-    if (!el) return;
-    autoScrollAtRef.current = Date.now();
-    el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior });
-  }, []);
-
-  /** 按钮点击：平滑滚动 + 禁用 handler 直到位移稳定 */
+  /** 按钮点击：平滑滚动 */
   const handleScrollToBottom = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
     userScrolledRef.current = false;
     setShowScrollBtn(false);
-    // 用较长的 debounce 覆盖 smooth 动画期间的中间 scroll 事件
-    autoScrollAtRef.current = Date.now() + 400;
+    // 长 debounce 覆盖 smooth 动画期间的中间事件
+    autoScrollAtRef.current = Date.now() + 500;
     el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "smooth" });
   }, []);
 
@@ -65,14 +61,15 @@ export function MessageList() {
       requestAnimationFrame(() => {
         ticking = false;
 
-        // 程序滚动后的 debounce 窗口内，忽略所有事件
+        // 程序滚动后的 debounce 窗口内，忽略（这是 scrollTo 触发的事件）
         if (Date.now() - autoScrollAtRef.current < DEBOUNCE_MS) return;
 
+        // 超出 debounce 窗口 = 用户手动操作
         const currentTop = el.scrollTop;
-        const diff = prevScrollTopRef.current - currentTop; // > 0 = 往上滚
+        const diff = prevScrollTopRef.current - currentTop;
         prevScrollTopRef.current = currentTop;
 
-        // 用户真正往上滚 → 停止自动跟随
+        // 用户往上滚 → 停止自动跟随
         if (diff > 0 && !userScrolledRef.current) {
           userScrolledRef.current = true;
           setShowScrollBtn(true);
@@ -90,8 +87,11 @@ export function MessageList() {
     return () => el.removeEventListener("scroll", handleScroll);
   }, [checkNearBottom]);
 
-  /** 自动滚动逻辑 */
+  /** 自动滚动逻辑（限流 200ms） */
   useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
     const newMsgCount = messages.length;
     const isNewMessage = newMsgCount > prevCountRef.current;
     prevCountRef.current = newMsgCount;
@@ -100,15 +100,21 @@ export function MessageList() {
     if (isNewMessage) {
       userScrolledRef.current = false;
       setShowScrollBtn(false);
-      autoScrollToBottom("instant");
+      autoScrollAtRef.current = Date.now();
+      el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "instant" });
       return;
     }
 
-    // 流式中 + 用户未上拉 → 即时跟随（不用 smooth，避免抖动）
+    // 流式中 + 用户未上拉 → 限流 auto-scroll
     if (isStreaming && !userScrolledRef.current) {
-      autoScrollToBottom("instant");
+      const now = Date.now();
+      if (now - lastAutoScrollAtRef.current >= AUTO_SCROLL_THROTTLE_MS) {
+        lastAutoScrollAtRef.current = now;
+        autoScrollAtRef.current = now;
+        el.scrollTo({ top: el.scrollHeight - el.clientHeight, behavior: "instant" });
+      }
     }
-  }, [messages, isStreaming, autoScrollToBottom]);
+  }, [messages, isStreaming]);
 
   if (messages.length === 0) {
     return (
@@ -153,11 +159,9 @@ export function MessageList() {
             </div>
           );
         })}
-        {/* 滚动锚点 */}
         <div style={{ height: 1 }} />
       </div>
 
-      {/* 浮动「回到底部」按钮 */}
       {showScrollBtn && (
         <div className="sticky bottom-4 flex justify-center z-10 pointer-events-none">
           <button
