@@ -1,10 +1,7 @@
 /**
- * Thinking 块组件（可折叠 + 流式自动展开/结束后自动折叠）
- *
- * 流式输出时：默认展开，实时显示思考过程
- * 输出结束后：自动折叠，点击可手动展开/折叠
+ * Thinking 块组件（可折叠）
  */
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 
 interface Props {
   content: string;
@@ -14,18 +11,6 @@ interface Props {
 
 export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
   const [expanded, setExpanded] = useState(true);
-  const wasStreamingRef = useRef(false);
-
-  // 流式中始终展开，结束后自动折叠
-  useEffect(() => {
-    if (isStreaming) {
-      wasStreamingRef.current = true;
-      setExpanded(true);
-    } else if (wasStreamingRef.current) {
-      wasStreamingRef.current = false;
-      setExpanded(false);
-    }
-  }, [isStreaming]);
 
   if (!content) return null;
 
