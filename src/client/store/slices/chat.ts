@@ -173,9 +173,15 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
   },
 
   abortChat: () => {
+    const sessionId = get().currentSessionId;
+    // 1. 中止前端 SSE 连接
     abortController?.abort();
     abortController = null;
     set({ isStreaming: false, streamingMessageId: null });
+    // 2. 调后端接口停止 Agent 执行
+    if (sessionId) {
+      api.abortChat(sessionId).catch(() => {});
+    }
   },
 
   _resumeStream: async (sessionId: string) => {

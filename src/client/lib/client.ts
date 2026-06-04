@@ -208,6 +208,14 @@ export async function checkChatStatus(sessionId: string): Promise<{ streaming: b
   return request(`/chat/status/${sessionId}`);
 }
 
+/** 中止指定 session 的 Agent 执行 */
+export async function abortChat(sessionId: string): Promise<void> {
+  await request(`/chat/abort`, {
+    method: "POST",
+    body: JSON.stringify({ sessionId }),
+  });
+}
+
 export interface ResumeStreamCallbacks {
   onCatchup: (data: { text: string; thinking?: string; toolCalls?: Array<{ id: string; name: string; args: any; status: string }> }) => void;
   onTextDelta: (delta: string) => void;
