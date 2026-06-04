@@ -57,6 +57,10 @@ storage:
 server:
   port: 3000
 
+# 客户端配置
+client:
+  port: 5173              # Vite dev server 端口
+
 # 日志配置
 logging:
   level: info              # debug | info | warn | error

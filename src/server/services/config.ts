@@ -60,6 +60,11 @@ export interface ServerConfig {
   port: number;
 }
 
+/** 客户端配置 */
+export interface ClientConfig {
+  port: number;
+}
+
 /** 日志配置 */
 export interface LoggingConfig {
   level: "debug" | "info" | "warn" | "error";
@@ -77,6 +82,7 @@ export interface AppConfig {
   llm: LLMConfig;
   storage: StorageConfig;
   server: ServerConfig;
+  client: ClientConfig;
   logging: LoggingConfig;
   context: ContextConfig;
 }
@@ -143,6 +149,9 @@ export function loadConfig(path?: string): AppConfig {
     server: {
       port: parsed.server?.port || 3000,
     },
+    client: {
+      port: parsed.client?.port || 5173,
+    },
     logging: {
       level: parsed.logging?.level || "info",
       dir: parsed.logging?.dir || "./logs",
@@ -178,6 +187,7 @@ export function saveConfig(config: AppConfig): void {
       providers: config.llm.providers,
     },
     server: config.server,
+    client: config.client,
     storage: config.storage,
     logging: config.logging,
     context: config.context,

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch src/server/index.ts",
-    "dev:client": "vite --config src/client/vite.config.ts",
+    "dev:client": "node scripts/dev-client.mjs",
     "build": "tsc -p tsconfig.server.json && vite build --config src/client/vite.config.ts",
     "build:server": "tsc -p tsconfig.server.json",
     "test": "vitest",
@@ -50,6 +50,7 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
     "tailwindcss": "^4.3.0",
     "tsx": "^4.22.3",
     "typescript": "^6.0.3",

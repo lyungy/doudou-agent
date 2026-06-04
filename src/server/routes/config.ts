@@ -59,6 +59,7 @@ router.put("/", (req, res) => {
       },
       storage: { ...current.storage, ...updates.storage },
       server: { ...current.server, ...updates.server },
+      client: { ...current.client, ...(updates as any).client },
       logging: { ...current.logging, ...(updates as any).logging },
       context: { ...current.context, ...(updates as any).context },
     };
