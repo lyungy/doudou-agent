@@ -51,7 +51,7 @@ function getAllLLMRequests(): LLMRequestRecord[] {
 /** 获取任务执行记录 */
 function getTaskRuns(): any[] {
   try {
-    return getTaskScheduler().getRuns(undefined, 1000);
+    return getTaskScheduler().getRuns({}, 1000).runs;
   } catch {
     return [];
   }

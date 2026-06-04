@@ -38,22 +38,44 @@ router.get("/", (req: Request, res: Response) => {
  * GET /api/logs/llm-requests — 查询 LLM 请求记录
  * 查询参数：
  *   sessionId — 过滤 session
+ *   status    — 过滤状态（connecting/streaming/completed/error/aborted）
+ *   modelId   — 过滤模型
+ *   since     — 起始时间（ISO 8601）
  *   limit     — 数量限制（默认 50）
+ *   offset    — 偏移量（默认 0）
  */
 router.get("/llm-requests", (req: Request, res: Response) => {
   const tracker = getLLMTracker();
-  const sessionId = req.query.sessionId as string | undefined;
+  const filter = {
+    sessionId: req.query.sessionId as string | undefined,
+    status: req.query.status as string | undefined,
+    modelId: req.query.modelId as string | undefined,
+    since: req.query.since as string | undefined,
+  };
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
 
-  // 合并活跃请求 + 最近完成请求
-  const active = tracker.getActive();
-  const recent = sessionId
-    ? tracker.getBySession(sessionId, limit)
-    : tracker.getRecent(limit);
+  const result = tracker.query(filter, limit, offset);
+  // 合并活跃请求（仅在无 offset 且第一页时）
+  let active: any[] = [];
+  if (offset === 0) {
+    active = tracker.getActive();
+    if (filter.sessionId) active = active.filter((r) => r.sessionId === filter.sessionId);
+    if (filter.status) active = active.filter((r) => r.status === filter.status);
+    if (filter.modelId) active = active.filter((r) => r.modelId === filter.modelId);
+  }
 
-  const requests = [...active, ...recent].slice(0, limit);
+  const requests = [...active, ...result.records];
 
-  res.json({ requests });
+  res.json({ requests, total: result.total + active.length });
+});
+
+/**
+ * GET /api/logs/llm-requests/models — 获取所有模型 ID（供筛选下拉用）
+ */
+router.get("/llm-requests/models", (_req: Request, res: Response) => {
+  const tracker = getLLMTracker();
+  res.json({ models: tracker.getModelIds() });
 });
 
 export default router;

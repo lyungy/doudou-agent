@@ -59,8 +59,9 @@ interface AppState {
 
   // 任务执行日志
   taskRuns: TaskRun[];
+  taskRunsTotal: number;
   loadingTaskRuns: boolean;
-  loadTaskRuns: (taskId?: string) => Promise<void>;
+  loadTaskRuns: (filter?: api.TaskRunFilter) => Promise<void>;
 
   // 思考等级
   thinkingLevel: ThinkingLevel;
@@ -227,12 +228,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // 任务执行日志
   taskRuns: [],
+  taskRunsTotal: 0,
   loadingTaskRuns: false,
-  loadTaskRuns: async (taskId) => {
+  loadTaskRuns: async (filter) => {
     set({ loadingTaskRuns: true });
     try {
-      const runs = await api.fetchTaskRuns(taskId);
-      set({ taskRuns: runs, loadingTaskRuns: false });
+      const result = await api.fetchTaskRuns(filter);
+      set({ taskRuns: result.runs, taskRunsTotal: result.total, loadingTaskRuns: false });
     } catch {
       set({ loadingTaskRuns: false });
     }

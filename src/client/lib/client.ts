@@ -313,11 +313,28 @@ export async function fetchLogs(filter: LogFilter = {}): Promise<{ entries: LogE
   return request(`/logs${qs ? `?${qs}` : ""}`);
 }
 
-export async function fetchLLMRequests(sessionId?: string, limit = 50): Promise<{ requests: LLMRequestRecord[] }> {
+export interface LLMRequestFilter {
+  sessionId?: string;
+  status?: string;
+  modelId?: string;
+  since?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchLLMRequests(filter: LLMRequestFilter = {}): Promise<{ requests: LLMRequestRecord[]; total: number }> {
   const params = new URLSearchParams();
-  if (sessionId) params.set("sessionId", sessionId);
-  params.set("limit", String(limit));
+  if (filter.sessionId) params.set("sessionId", filter.sessionId);
+  if (filter.status) params.set("status", filter.status);
+  if (filter.modelId) params.set("modelId", filter.modelId);
+  if (filter.since) params.set("since", filter.since);
+  params.set("limit", String(filter.limit || 50));
+  if (filter.offset) params.set("offset", String(filter.offset));
   return request(`/logs/llm-requests?${params.toString()}`);
+}
+
+export async function fetchLLMRequestModels(): Promise<{ models: string[] }> {
+  return request("/logs/llm-requests/models");
 }
 
 // ============ Tasks API ============
@@ -370,13 +387,36 @@ export async function triggerTask(id: string): Promise<TaskRun> {
   return data.run;
 }
 
-export async function fetchTaskRuns(taskId?: string, limit = 50): Promise<TaskRun[]> {
+export interface TaskRunFilter {
+  taskId?: string;
+  status?: string;
+  since?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export async function fetchTaskRuns(filter: TaskRunFilter = {}): Promise<{ runs: TaskRun[]; total: number }> {
   const params = new URLSearchParams();
-  if (taskId) params.set('taskId', taskId);
-  params.set('limit', String(limit));
-  const url = taskId ? `/tasks/${taskId}/runs?limit=${limit}` : `/tasks/runs?limit=${limit}`;
-  const data = await request<{ runs: TaskRun[] }>(url);
-  return data.runs;
+  if (filter.status) params.set("status", filter.status);
+  if (filter.since) params.set("since", filter.since);
+  params.set("limit", String(filter.limit || 50));
+  if (filter.offset) params.set("offset", String(filter.offset));
+  const url = filter.taskId
+    ? `/tasks/${filter.taskId}/runs?${params.toString()}`
+    : `/tasks/runs?${params.toString()}`;
+  return request(url);
+}
+
+export async function fetchTaskRunStats(): Promise<{
+  total: number;
+  success: number;
+  failed: number;
+  timeout: number;
+  running: number;
+  avgDuration: number;
+  taskStats: { taskId: string; taskName: string; total: number; success: number; failed: number; avgDuration: number }[];
+}> {
+  return request("/tasks/runs/stats");
 }
 
 // ============ Stats API ============

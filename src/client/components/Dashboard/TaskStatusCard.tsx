@@ -23,7 +23,7 @@ export function TaskStatusCard({ tasks: tasksProp, taskRuns: runsProp }: Props) 
       try {
         const [t, r] = await Promise.all([fetchTasks(), fetchTaskRuns()]);
         setTasks(t);
-        setRuns(r);
+        setRuns(r.runs);
       } catch {
         // ignore
       }

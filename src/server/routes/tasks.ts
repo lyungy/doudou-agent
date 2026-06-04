@@ -71,20 +71,38 @@ router.post("/:id/trigger", async (req: Request, res: Response) => {
   res.json({ run });
 });
 
-/** GET /runs — 查询所有执行日志 */
+/** GET /runs — 查询所有执行日志（支持筛选和分页） */
 router.get("/runs", (req: Request, res: Response) => {
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+  const filter = {
+    status: req.query.status as string | undefined,
+    since: req.query.since as string | undefined,
+  };
   const scheduler = getTaskScheduler();
-  const runs = scheduler.getRuns(undefined, limit);
-  res.json({ runs });
+  const result = scheduler.getRuns(filter, limit, offset);
+  res.json({ runs: result.runs, total: result.total });
 });
 
-/** GET /:id/runs — 查询指定任务执行日志 */
+/** GET /runs/stats — 任务执行统计分析 */
+router.get("/runs/stats", (_req: Request, res: Response) => {
+  const scheduler = getTaskScheduler();
+  const stats = scheduler.getRunStats();
+  res.json(stats);
+});
+
+/** GET /:id/runs — 查询指定任务执行日志（支持筛选和分页） */
 router.get("/:id/runs", (req: Request, res: Response) => {
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
+  const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : 0;
+  const filter = {
+    taskId: req.params.id as string,
+    status: req.query.status as string | undefined,
+    since: req.query.since as string | undefined,
+  };
   const scheduler = getTaskScheduler();
-  const runs = scheduler.getRuns(req.params.id as string, limit);
-  res.json({ runs });
+  const result = scheduler.getRuns(filter, limit, offset);
+  res.json({ runs: result.runs, total: result.total });
 });
 
 export default router;

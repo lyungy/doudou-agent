@@ -175,11 +175,73 @@ class TaskScheduler {
 
   // ============ 执行日志 ============
 
-  /** 查询执行日志 */
-  getRuns(taskId?: string, limit = 50): TaskRun[] {
-    const runs = this.loadRuns();
-    const filtered = taskId ? runs.filter((r) => r.taskId === taskId) : runs;
-    return filtered.slice(0, limit);
+  /** 查询执行日志（支持筛选和分页） */
+  getRuns(filter: {
+    taskId?: string;
+    status?: string;
+    since?: string;
+  } = {}, limit = 50, offset = 0): { runs: TaskRun[]; total: number } {
+    const allRuns = this.loadRuns();
+
+    // 筛选
+    let filtered = allRuns;
+    if (filter.taskId) {
+      filtered = filtered.filter((r) => r.taskId === filter.taskId);
+    }
+    if (filter.status) {
+      filtered = filtered.filter((r) => r.status === filter.status);
+    }
+    if (filter.since) {
+      const sinceTs = new Date(filter.since).getTime();
+      filtered = filtered.filter((r) => new Date(r.startedAt).getTime() >= sinceTs);
+    }
+
+    const total = filtered.length;
+    const runs = filtered.slice(offset, offset + limit);
+    return { runs, total };
+  }
+
+  /** 获取所有任务的执行统计 */
+  getRunStats(): {
+    total: number;
+    success: number;
+    failed: number;
+    timeout: number;
+    running: number;
+    avgDuration: number;
+    taskStats: { taskId: string; taskName: string; total: number; success: number; failed: number; avgDuration: number }[];
+  } {
+    const allRuns = this.loadRuns();
+    const success = allRuns.filter((r) => r.status === "success").length;
+    const failed = allRuns.filter((r) => r.status === "failed").length;
+    const timeout = allRuns.filter((r) => r.status === "timeout").length;
+    const running = allRuns.filter((r) => r.status === "running").length;
+    const durations = allRuns.filter((r) => r.duration).map((r) => r.duration!);
+    const avgDuration = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
+
+    // 按任务分组统计
+    const taskMap = new Map<string, { taskName: string; runs: TaskRun[] }>();
+    for (const run of allRuns) {
+      const existing = taskMap.get(run.taskId);
+      if (existing) {
+        existing.runs.push(run);
+      } else {
+        taskMap.set(run.taskId, { taskName: run.taskName, runs: [run] });
+      }
+    }
+    const taskStats = [...taskMap.entries()].map(([taskId, { taskName, runs }]) => {
+      const rDurations = runs.filter((r) => r.duration).map((r) => r.duration!);
+      return {
+        taskId,
+        taskName,
+        total: runs.length,
+        success: runs.filter((r) => r.status === "success").length,
+        failed: runs.filter((r) => r.status === "failed" || r.status === "timeout").length,
+        avgDuration: rDurations.length > 0 ? rDurations.reduce((a, b) => a + b, 0) / rDurations.length : 0,
+      };
+    });
+
+    return { total: allRuns.length, success, failed, timeout, running, avgDuration, taskStats };
   }
 
   // ============ 内部方法 ============

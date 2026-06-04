@@ -42,8 +42,8 @@ export async function showStats(): Promise<void> {
     const tasks = scheduler.getAll();
     taskCount = tasks.length;
     enabledTaskCount = tasks.filter((t) => t.enabled).length;
-    const runs = scheduler.getRuns(undefined, 10000);
-    taskRunCount = runs.length;
+    const runsResult = scheduler.getRuns({}, 10000);
+    taskRunCount = runsResult.total;
   } catch {
     // 任务调度器可能未初始化
   }

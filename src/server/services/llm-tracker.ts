@@ -160,12 +160,21 @@ class LLMTracker {
   }
 
   /**
-   * 获取最近的完成记录（内存 + 磁盘历史合并，按时间倒序）
+   * 查询 LLM 请求记录（支持分页和筛选）
+   * @param filter 筛选条件
+   * @param limit 每页条数
+   * @param offset 偏移量
+   * @returns { records, total }
    */
-  getRecent(limit = 50): LLMRequestRecord[] {
+  query(filter: {
+    sessionId?: string;
+    status?: string;
+    modelId?: string;
+    since?: string;
+  } = {}, limit = 50, offset = 0): { records: LLMRequestRecord[]; total: number } {
     const memoryEntries = this.getCompletedEntries();
     const diskEntries = this.loadFromDisk();
-    // 合并去重（内存优先，因为内存是最新的）
+    // 合并去重（内存优先）
     const seen = new Set(memoryEntries.map((r) => r.id));
     const merged = [...memoryEntries];
     for (const r of diskEntries) {
@@ -176,14 +185,55 @@ class LLMTracker {
     }
     // 按 startTime 倒序
     merged.sort((a, b) => b.startTime - a.startTime);
-    return merged.slice(0, limit);
+
+    // 筛选
+    let filtered = merged;
+    if (filter.sessionId) {
+      filtered = filtered.filter((r) => r.sessionId === filter.sessionId);
+    }
+    if (filter.status) {
+      filtered = filtered.filter((r) => r.status === filter.status);
+    }
+    if (filter.modelId) {
+      filtered = filtered.filter((r) => r.modelId === filter.modelId);
+    }
+    if (filter.since) {
+      const sinceTs = new Date(filter.since).getTime();
+      filtered = filtered.filter((r) => r.startTime >= sinceTs);
+    }
+
+    const total = filtered.length;
+    const records = filtered.slice(offset, offset + limit);
+    return { records, total };
   }
 
   /**
-   * 获取指定 session 的记录
+   * 获取最近的完成记录（兼容旧接口）
+   */
+  getRecent(limit = 50): LLMRequestRecord[] {
+    return this.query({}, limit).records;
+  }
+
+  /**
+   * 获取指定 session 的记录（兼容旧接口）
    */
   getBySession(sessionId: string, limit = 50): LLMRequestRecord[] {
-    return this.getRecent(1000).filter((r) => r.sessionId === sessionId).slice(0, limit);
+    return this.query({ sessionId }, limit).records;
+  }
+
+  /**
+   * 获取所有不同的 modelId（供前端筛选下拉用）
+   */
+  getModelIds(): string[] {
+    const memoryEntries = this.getCompletedEntries();
+    const diskEntries = this.loadFromDisk();
+    const seen = new Set(memoryEntries.map((r) => r.id));
+    const merged = [...memoryEntries];
+    for (const r of diskEntries) {
+      if (!seen.has(r.id)) merged.push(r);
+    }
+    const models = new Set(merged.map((r) => r.modelId));
+    return [...models].sort();
   }
 
   /**

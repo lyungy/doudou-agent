@@ -7,6 +7,7 @@ import type { LogEntry } from "../../types";
 import * as api from "../../lib/client";
 import { LogFilters, resolveTimeRange, type LogFilterState } from "./LogFilters";
 import { LLMRequestList } from "./LLMRequestList";
+import { Pagination } from "../common/Pagination";
 
 /** 标签页 */
 type TabType = "logs" | "llm";
@@ -16,8 +17,10 @@ export function LogPanel() {
   const [filter, setFilter] = useState<LogFilterState>({ level: "", module: "", since: "" });
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const pageSize = 50;
 
   // 加载日志
   const loadLogs = useCallback(async () => {
@@ -28,7 +31,8 @@ export function LogPanel() {
         level: filter.level || undefined,
         module: filter.module || undefined,
         since,
-        limit: 200,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
       });
       setEntries(result.entries);
       setTotal(result.total);
@@ -37,6 +41,11 @@ export function LogPanel() {
     } finally {
       setLoading(false);
     }
+  }, [filter, page]);
+
+  // 筛选条件变化时重置到第 1 页
+  useEffect(() => {
+    setPage(1);
   }, [filter]);
 
   useEffect(() => {
@@ -103,24 +112,27 @@ export function LogPanel() {
             {entries.length === 0 ? (
               <p className="text-sm text-neutral-400 py-8 text-center">暂无日志</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm font-mono border-collapse">
-                  <thead>
-                    <tr className="text-left text-neutral-500 border-b-2 border-neutral-200">
-                      <th className="pb-2 pr-4 font-semibold w-[190px]">时间</th>
-                      <th className="pb-2 pr-3 font-semibold w-[60px]">级别</th>
-                      <th className="pb-2 pr-3 font-semibold w-[70px]">模块</th>
-                      <th className="pb-2 pr-3 font-semibold">消息</th>
-                      <th className="pb-2 font-semibold w-[200px]">详情</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((entry, i) => (
-                      <LogRow key={i} entry={entry} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm font-mono border-collapse">
+                    <thead>
+                      <tr className="text-left text-neutral-500 border-b-2 border-neutral-200">
+                        <th className="pb-2 pr-4 font-semibold w-[190px]">时间</th>
+                        <th className="pb-2 pr-3 font-semibold w-[60px]">级别</th>
+                        <th className="pb-2 pr-3 font-semibold w-[70px]">模块</th>
+                        <th className="pb-2 pr-3 font-semibold">消息</th>
+                        <th className="pb-2 font-semibold w-[200px]">详情</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((entry, i) => (
+                        <LogRow key={i} entry={entry} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination total={total} page={page} pageSize={pageSize} onPageChange={setPage} />
+              </>
             )}
           </>
         ) : (
