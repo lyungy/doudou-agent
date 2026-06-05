@@ -78,4 +78,19 @@ router.get("/llm-requests/models", (_req: Request, res: Response) => {
   res.json({ models: tracker.getModelIds() });
 });
 
+/**
+ * GET /api/logs/cumulative-tokens — 累计指定 session 的 token 用量
+ * 查询参数：sessionId（必填）
+ */
+router.get("/cumulative-tokens", (req: Request, res: Response) => {
+  const sessionId = req.query.sessionId as string;
+  if (!sessionId) {
+    res.status(400).json({ error: "sessionId is required" });
+    return;
+  }
+  const tracker = getLLMTracker();
+  const tokens = tracker.getCumulativeTokens(sessionId);
+  res.json(tokens);
+});
+
 export default router;

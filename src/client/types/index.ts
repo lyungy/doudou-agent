@@ -107,6 +107,13 @@ export interface ToolCallInfo {
   isError?: boolean;
 }
 
+/** 累计 token 用量 */
+export interface CumulativeTokens {
+  inputTokens: number;
+  outputTokens: number;
+  requestCount: number;
+}
+
 /** 日志级别 */
 export type LogLevel = "debug" | "info" | "warn" | "error";
 

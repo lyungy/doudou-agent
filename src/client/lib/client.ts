@@ -1,7 +1,7 @@
 /**
  * API 请求封装
  */
-import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel, Task, TaskRun, PromptTemplate } from "../types";
+import type { SessionMeta, AppConfig, ChatMessage, ModelDef, LogEntry, LLMRequestRecord, ThinkingLevel, Task, TaskRun, PromptTemplate, CumulativeTokens } from "../types";
 
 const BASE = "/api";
 
@@ -375,6 +375,10 @@ export async function fetchLLMRequests(filter: LLMRequestFilter = {}): Promise<{
 
 export async function fetchLLMRequestModels(): Promise<{ models: string[] }> {
   return request("/logs/llm-requests/models");
+}
+
+export async function fetchCumulativeTokens(sessionId: string): Promise<CumulativeTokens> {
+  return request(`/logs/cumulative-tokens?sessionId=${encodeURIComponent(sessionId)}`);
 }
 
 // ============ Tasks API ============

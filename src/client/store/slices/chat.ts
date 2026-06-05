@@ -2,7 +2,7 @@
  * 对话状态 slice
  * 管理消息列表、SSE 流式对话、LLM 状态
  */
-import type { ChatMessage, ToolCallInfo, LLMRequestStatus, LLMStatusData } from "../../types";
+import type { ChatMessage, ToolCallInfo, LLMRequestStatus, LLMStatusData, CumulativeTokens } from "../../types";
 import * as api from "../../lib/client";
 import { convertToChatMessages } from "./chat-helpers";
 
@@ -14,6 +14,7 @@ export interface ChatState {
   currentThinking: string;
   currentToolCalls: ToolCallInfo[];
   llmStatusBySession: Record<string, LLMStatusData>;
+  cumulativeTokensBySession: Record<string, CumulativeTokens>;
 }
 
 export interface ChatActions {
@@ -22,6 +23,7 @@ export interface ChatActions {
   abortChat: () => void;
   getCurrentLLMStatus: () => LLMStatusData | null;
   setLLMStatus: (sessionId: string, data: LLMStatusData | null) => void;
+  refreshCumulativeTokens: (sessionId: string) => Promise<void>;
   // 内部方法
   _resumeStream: (sessionId: string) => Promise<void>;
   _setStreaming: (v: boolean) => void;
@@ -45,6 +47,7 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
   currentThinking: "",
   currentToolCalls: [],
   llmStatusBySession: {},
+  cumulativeTokensBySession: {},
 
   getCurrentLLMStatus: () => {
     const { currentSessionId, llmStatusBySession } = get();
@@ -62,6 +65,17 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
       }
       return { llmStatusBySession: next };
     });
+  },
+
+  refreshCumulativeTokens: async (sessionId: string) => {
+    try {
+      const tokens = await api.fetchCumulativeTokens(sessionId);
+      set((state: ChatState) => ({
+        cumulativeTokensBySession: { ...state.cumulativeTokensBySession, [sessionId]: tokens },
+      }));
+    } catch {
+      // 静默失败，不影响用户体验
+    }
   },
 
   sendMessage: async (content: string, images?: Array<{ data: string; mimeType: string }>) => {
@@ -132,6 +146,10 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
             outputTokens: data.outputTokens,
             error: data.error,
           } as LLMStatusData);
+          // LLM 请求完成后刷新累计 token 用量
+          if (data.status === "completed") {
+            get().refreshCumulativeTokens(sessionId);
+          }
         },
         onDone: () => {
           get()._commitAssistantMessage();

@@ -245,6 +245,24 @@ class LLMTracker {
     return this.records.get(requestId) || this.completed.find((r) => r.id === requestId) || null;
   }
 
+  /**
+   * 累计指定 session 的 token 用量（所有已完成请求的 inputTokens/outputTokens 之和）
+   */
+  getCumulativeTokens(sessionId: string): { inputTokens: number; outputTokens: number; requestCount: number } {
+    const { records } = this.query({ sessionId }, 9999);
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let requestCount = 0;
+    for (const r of records) {
+      if (r.status === "completed") {
+        inputTokens += r.inputTokens || 0;
+        outputTokens += r.outputTokens || 0;
+        requestCount++;
+      }
+    }
+    return { inputTokens, outputTokens, requestCount };
+  }
+
   // ============ 内部方法 ============
 
   private moveToCompleted(record: LLMRequestRecord): void {
