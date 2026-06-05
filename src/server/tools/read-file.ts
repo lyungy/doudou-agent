@@ -3,7 +3,7 @@
  */
 import { Type, type Static } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { readFileSync, existsSync } from "fs";
+import { readFile, access } from "fs/promises";
 
 const ReadFileParams = Type.Object({
   path: Type.String({ description: "要读取的文件路径（绝对路径或相对路径）" }),
@@ -17,11 +17,13 @@ export const readFileTool: AgentTool<typeof ReadFileParams> = {
   parameters: ReadFileParams,
 
   execute: async (toolCallId, params, signal, onUpdate) => {
-    if (!existsSync(params.path)) {
+    try {
+      await access(params.path);
+    } catch {
       throw new Error(`文件不存在: ${params.path}`);
     }
 
-    const content = readFileSync(params.path, (params.encoding as BufferEncoding) || "utf-8");
+    const content = await readFile(params.path, (params.encoding as BufferEncoding) || "utf-8");
 
     // 截断过长内容
     const maxLen = 50000;

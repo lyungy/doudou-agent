@@ -124,7 +124,7 @@ router.post("/stream", async (req: Request, res: Response) => {
       }
     }
 
-    // 提前捕获 usage（message_end 事件中 assistant 消息携带的 usage 最可靠）
+    // 捕获 usage：取最后一轮 LLM 的 usage（最可靠，代表当前上下文大小）
     let capturedUsage: { input?: number; output?: number } | null = null;
 
     // 订阅事件
@@ -157,7 +157,7 @@ router.post("/stream", async (req: Request, res: Response) => {
           return;
         }
 
-        // 在 message_end 中提前捕获 usage（此时 usage 最可靠）
+        // 在 message_end 中捕获 usage（覆盖式，取最后一轮的值）
         if (msg?.role === "assistant" && msg?.usage) {
           capturedUsage = msg.usage;
         }
@@ -218,13 +218,15 @@ router.post("/stream", async (req: Request, res: Response) => {
 
     if (!aborted) {
       // LLM 追踪：完成
-      // 优先使用 message_end 事件中提前捕获的 usage（最可靠）
-      // 兜底从 agent.state.messages 取（可能为空，因为 message_end 触发时 usage 可能未填充）
+      // 优先使用 message_end 事件中捕获的 usage（最可靠）
+      // 兜底从 agent.state.messages 取最后一条 assistant 消息的 usage
       const lastAssistant = allMsgs.filter((m: any) => m.role === "assistant").pop();
       const fallbackUsage = (lastAssistant as any)?.usage;
       const finalUsage = capturedUsage || fallbackUsage;
+      // 实际上下文大小 = inputTokens + cacheRead（非缓存部分 + 缓存命中部分）
+      const actualInputTokens = (finalUsage?.input || 0) + ((finalUsage as any)?.cacheRead || 0);
       tracker.onComplete(requestId, {
-        inputTokens: finalUsage?.input,
+        inputTokens: actualInputTokens || undefined,
         outputTokens: finalUsage?.output,
       });
 

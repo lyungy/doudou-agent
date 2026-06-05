@@ -69,8 +69,9 @@ function estimateMessageTokens(msg: any): number {
  * 策略：
  *   1. 从最新消息往旧方向累加 token
  *   2. 优先丢弃旧的 toolResult 消息（体积大、时效性低）
- *   3. 保证不切断 turn 边界（从 user 消息开始）
- *   4. 至少保留最近一个完整 turn
+ *   3. 丢弃 toolResult 时，用摘要替换（保留文件路径，避免 Agent 完全忘记读过该文件）
+ *   4. 保证不切断 turn 边界（从 user 消息开始）
+ *   5. 至少保留最近一个完整 turn
  */
 function truncateMessages(messages: any[], maxTokens: number): any[] {
   if (messages.length === 0) return messages;
@@ -85,30 +86,55 @@ function truncateMessages(messages: any[], maxTokens: number): any[] {
 
   getLogger().info("agent", `历史消息 token 超限：${totalTokens} > ${maxTokens}，开始截断`);
 
-  // 策略：从旧消息开始，优先丢弃 toolResult，然后丢弃旧 turn
-  // 标记每条消息是否保留
-  const keep = new Array(messages.length).fill(true);
+  // 深拷贝消息数组（避免修改原始数据）
+  const workingMessages = messages.map((msg) => ({ ...msg }));
   let currentTokens = totalTokens;
 
-  // 第一轮：优先丢弃旧的 toolResult 消息（体积大、时效性低）
-  for (let i = 0; i < messages.length - 1; i++) {  // 保留最后一条不丢弃
+  // 第一轮：优先压缩旧的 toolResult 消息（体积大、时效性低）
+  // 用摘要替换完整内容，保留文件路径等关键信息
+  for (let i = 0; i < workingMessages.length - 1; i++) {
     if (currentTokens <= maxTokens) break;
-    const msg = messages[i];
+    const msg = workingMessages[i];
+
+    // 检查是否是 toolResult 消息
     const isToolResult = msg?.role === "tool" ||
       (Array.isArray(msg?.content) && msg.content.some((b: any) => b.type === "toolResult"));
+
     if (isToolResult) {
-      const tokens = estimateMessageTokens(msg);
-      keep[i] = false;
-      currentTokens -= tokens;
+      const oldTokens = estimateMessageTokens(msg);
+
+      // 尝试从前面的 assistant 消息中提取工具调用信息（文件路径等）
+      const toolSummary = extractToolSummary(i, workingMessages);
+
+      // 用摘要替换完整内容
+      if (Array.isArray(msg.content)) {
+        msg.content = msg.content.map((block: any) => {
+          if (block.type === "toolResult") {
+            return {
+              ...block,
+              result: toolSummary,
+            };
+          }
+          return block;
+        });
+      } else if (typeof msg.content === "string") {
+        msg.content = toolSummary;
+      }
+
+      const newTokens = estimateMessageTokens(msg);
+      currentTokens -= (oldTokens - newTokens);
     }
   }
 
   // 第二轮：如果仍然超限，从旧到新丢弃完整 turn（从 user 消息开始）
   if (currentTokens > maxTokens) {
+    // 标记哪些消息保留
+    const keep = new Array(workingMessages.length).fill(true);
+
     // 找到所有 user 消息的位置（turn 起点）
     const turnStarts: number[] = [];
-    for (let i = 0; i < messages.length; i++) {
-      if (messages[i]?.role === "user" && keep[i]) {
+    for (let i = 0; i < workingMessages.length; i++) {
+      if (workingMessages[i]?.role === "user" && keep[i]) {
         turnStarts.push(i);
       }
     }
@@ -117,35 +143,85 @@ function truncateMessages(messages: any[], maxTokens: number): any[] {
     for (const turnStart of turnStarts) {
       if (currentTokens <= maxTokens) break;
 
-      // 找这个 turn 的结束位置（下一个 user 消息之前）
-      const nextTurnStart = turnStarts.find((t) => t > turnStart) ?? messages.length;
+      const nextTurnStart = turnStarts.find((t) => t > turnStart) ?? workingMessages.length;
 
-      // 计算这个 turn 的 token 数
       let turnTokens = 0;
       for (let i = turnStart; i < nextTurnStart; i++) {
         if (keep[i]) {
-          turnTokens += estimateMessageTokens(messages[i]);
+          turnTokens += estimateMessageTokens(workingMessages[i]);
         }
       }
 
-      // 丢弃这个 turn
       for (let i = turnStart; i < nextTurnStart; i++) {
         keep[i] = false;
       }
       currentTokens -= turnTokens;
     }
+
+    return workingMessages.filter((_, i) => keep[i]);
   }
 
-  // 收集保留的消息
-  const result = messages.filter((_, i) => keep[i]);
-  const dropped = messages.length - result.length;
-  const finalTokens = currentTokens;
-
-  if (dropped > 0) {
-    getLogger().info("agent", `历史消息截断：丢弃 ${dropped} 条，保留 ${result.length} 条（${finalTokens} tokens，上限 ${maxTokens}）`);
+  const dropped = messages.length - workingMessages.length;
+  if (dropped > 0 || currentTokens < totalTokens) {
+    getLogger().info("agent", `历史消息截断：保留 ${workingMessages.length} 条（${currentTokens} tokens，上限 ${maxTokens}）`);
   }
 
-  return result;
+  return workingMessages;
+}
+
+/**
+ * 从工具调用上下文中提取摘要信息（工具名、文件路径等）
+ * 用于替换被压缩的 toolResult，让 Agent 至少知道"读过什么文件"
+ */
+function extractToolSummary(toolResultIndex: number, messages: any[]): string {
+  // 从 toolResult 中提取 toolCallId（用于匹配对应的 toolCall）
+  const toolResultMsg = messages[toolResultIndex];
+  const toolResultBlocks = Array.isArray(toolResultMsg?.content)
+    ? toolResultMsg.content.filter((b: any) => b.type === "toolResult")
+    : [];
+  const toolCallIds = new Set(toolResultBlocks.map((b: any) => b.toolCallId).filter(Boolean));
+
+  // 往前找最近的 assistant 消息中的 toolCall
+  for (let i = toolResultIndex - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+
+    const content = Array.isArray(msg.content) ? msg.content : [];
+    for (const block of content) {
+      if (block.type !== "toolCall") continue;
+
+      // 通过 toolCallId 匹配对应的 toolCall（并行工具调用时有多个 toolCall）
+      const blockId = block.toolCallId || block.id;
+      if (toolCallIds.size > 0 && blockId && !toolCallIds.has(blockId)) continue;
+
+      const toolName = block.toolName || block.name || "";
+      const args = block.arguments || {};
+
+      // 根据工具类型生成摘要
+      if (toolName === "read_file") {
+        return `[已读取文件: ${args.path || "未知路径"}，内容已被压缩]`;
+      }
+      if (toolName === "write_file") {
+        return `[已写入文件: ${args.path || "未知路径"}]`;
+      }
+      if (toolName === "edit_file") {
+        return `[已编辑文件: ${args.path || "未知路径"}]`;
+      }
+      if (toolName === "list_directory") {
+        return `[已列出目录: ${args.path || "未知路径"}]`;
+      }
+      if (toolName === "grep") {
+        return `[已搜索: pattern="${args.pattern}", path="${args.path || ""}"]`;
+      }
+      if (toolName === "bash") {
+        const cmd = typeof args.command === "string" ? args.command.slice(0, 100) : "";
+        return `[已执行命令: ${cmd}]`;
+      }
+      return `[已执行工具: ${toolName}]`;
+    }
+    break; // 只看最近的 assistant 消息
+  }
+  return "[工具结果已被压缩]";
 }
 
 /**
