@@ -7,6 +7,7 @@ import { Router } from "express";
 import type { Request, Response } from "express";
 import { getLogger, type LogLevel } from "../services/logger.js";
 import { getLLMTracker } from "../services/llm-tracker.js";
+import { estimateContextTokens } from "../services/agent.js";
 
 const router = Router();
 
@@ -90,6 +91,11 @@ router.get("/cumulative-tokens", (req: Request, res: Response) => {
   }
   const tracker = getLLMTracker();
   const tokens = tracker.getCumulativeTokens(sessionId);
+  // 如果 llm-tracker 中没有 contextTokens，从 agent 当前状态兜底
+  if (!tokens.contextTokens) {
+    const estimated = estimateContextTokens(sessionId);
+    if (estimated !== null) tokens.contextTokens = estimated;
+  }
   res.json(tokens);
 });
 

@@ -214,3 +214,26 @@ export function getAgentState(sessionId: string) {
 export function getAgentForResume(sessionId: string): Agent | null {
   return agents.get(sessionId) || null;
 }
+
+/**
+ * 从 Agent 当前状态估算 context token 数
+ * 当 llm-tracker 中没有 contextTokens 时，用此函数兜底
+ */
+export function estimateContextTokens(sessionId: string): number | null {
+  const agent = agents.get(sessionId);
+  if (!agent) return null;
+  let tokens = 0;
+  if (agent.state.systemPrompt) {
+    tokens += Math.ceil(agent.state.systemPrompt.length / 4);
+  }
+  for (const msg of agent.state.messages) {
+    const m = msg as any;
+    const text = typeof m.content === "string"
+      ? m.content
+      : Array.isArray(m.content)
+        ? m.content.map((b: any) => b.text || b.thinking || JSON.stringify(b.arguments || "")).join("")
+        : "";
+    tokens += Math.ceil(text.length / 4);
+  }
+  return tokens;
+}
