@@ -39,16 +39,18 @@ export function ContextUsageBar() {
   // 无数据时不显示
   if (!tokens || tokens.requestCount === 0) return null;
 
-  const inputTokens = tokens.inputTokens;
+  // 上下文占用量 = 最后一次请求的 inputTokens（因为每次请求发送全部历史消息）
+  // cumulativeTokensBySession 存的是累计值，但显示最新一次的即可
+  const inputTokens = tokens.lastInputTokens;
   const percentage = Math.min((inputTokens / contextWindow) * 100, 100);
   const colors = getUsageColor(percentage);
 
   return (
-    <div className="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-neutral-100 bg-neutral-50/80">
-      <span className="text-neutral-500 shrink-0">上下文</span>
+    <div className="flex items-center justify-center gap-2 px-4 py-1 text-xs">
+      <span className="text-neutral-400 shrink-0">上下文</span>
 
       {/* 进度条 */}
-      <div className="flex-1 h-1.5 bg-neutral-200 rounded-full overflow-hidden max-w-[200px]">
+      <div className="h-1.5 w-24 bg-neutral-200 rounded-full overflow-hidden">
         <div
           className={`h-full rounded-full transition-all duration-300 ${colors.bar}`}
           style={{ width: `${percentage}%` }}
@@ -62,7 +64,6 @@ export function ContextUsageBar() {
       <span className="text-neutral-400">
         {inputTokens.toLocaleString()} / {contextWindow.toLocaleString()}
       </span>
-      <span className="text-neutral-400">tokens</span>
     </div>
   );
 }

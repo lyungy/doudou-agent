@@ -246,21 +246,33 @@ class LLMTracker {
   }
 
   /**
-   * 累计指定 session 的 token 用量（所有已完成请求的 inputTokens/outputTokens 之和）
+   * 获取指定 session 的 token 用量
+   * lastInputTokens: 最后一次请求的 inputTokens（即当前上下文占用量）
+   * totalInputTokens: 所有请求 inputTokens 之和（用于成本统计）
    */
-  getCumulativeTokens(sessionId: string): { inputTokens: number; outputTokens: number; requestCount: number } {
+  getCumulativeTokens(sessionId: string): {
+    lastInputTokens: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    requestCount: number;
+  } {
     const { records } = this.query({ sessionId }, 9999);
-    let inputTokens = 0;
-    let outputTokens = 0;
+    let totalInputTokens = 0;
+    let totalOutputTokens = 0;
+    let lastInputTokens = 0;
     let requestCount = 0;
+    // records 按 startTime 倒序，第一个 completed 就是最近一次
     for (const r of records) {
       if (r.status === "completed") {
-        inputTokens += r.inputTokens || 0;
-        outputTokens += r.outputTokens || 0;
+        totalInputTokens += r.inputTokens || 0;
+        totalOutputTokens += r.outputTokens || 0;
+        if (requestCount === 0) {
+          lastInputTokens = r.inputTokens || 0;  // 最近一次请求的 inputTokens
+        }
         requestCount++;
       }
     }
-    return { inputTokens, outputTokens, requestCount };
+    return { lastInputTokens, totalInputTokens, totalOutputTokens, requestCount };
   }
 
   // ============ 内部方法 ============

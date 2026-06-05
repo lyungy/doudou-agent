@@ -109,8 +109,9 @@ export interface ToolCallInfo {
 
 /** 累计 token 用量 */
 export interface CumulativeTokens {
-  inputTokens: number;
-  outputTokens: number;
+  lastInputTokens: number;   // 最后一次请求的 inputTokens（上下文占用量）
+  totalInputTokens: number;  // 所有请求 inputTokens 之和
+  totalOutputTokens: number; // 所有请求 outputTokens 之和
   requestCount: number;
 }
 
