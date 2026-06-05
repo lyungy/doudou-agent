@@ -74,15 +74,29 @@ cp config.yaml.example config.yaml
 
 ```yaml
 llm:
-  provider: openai
-  model: gpt-4o
-  api_key: sk-your-api-key-here
-  base_url: https://api.openai.com/v1
+  thinking_level: medium
   temperature: 0.7
-  max_tokens: 4096
+  providers:
+    - name: DeepSeek
+      provider: openai
+      api_key: sk-your-api-key-here
+      base_url: https://api.deepseek.com/v1
+      models:
+        - id: deepseek-chat
+          name: DeepSeek Chat
+          reasoning: false
+          input: ["text"]
+          contextWindow: 64000
+          maxTokens: 4096
+
+storage:
+  data_dir: ./.doudou
 
 server:
   port: 3000
+
+client:
+  port: 5173              # 前端 dev server 端口
 
 logging:
   level: info
@@ -149,16 +163,25 @@ npm run build
 
 ## 🔧 配置说明
 
-### LLM 配置
+### LLM 配置（providers 数组）
 
 | 字段 | 必填 | 说明 | 示例 |
 |------|------|------|------|
-| `provider` | 是 | 固定为 `openai`（兼容所有 OpenAI 格式 API） | `openai` |
-| `model` | 是 | 模型名称 | `gpt-4o` |
-| `api_key` | 是 | API 密钥 | `sk-xxx` |
-| `base_url` | 是 | API 端点地址 | `https://api.openai.com/v1` |
-| `temperature` | 否 | 温度参数，默认 `0.7` | `0.7` |
-| `max_tokens` | 否 | 最大输出 token，默认 `4096` | `4096` |
+| `providers[].name` | 是 | Provider 显示名称 | `DeepSeek` |
+| `providers[].provider` | 是 | API 协议（固定 `openai`） | `openai` |
+| `providers[].api_key` | 是 | API 密钥 | `sk-xxx` |
+| `providers[].base_url` | 是 | API 端点地址 | `https://api.deepseek.com/v1` |
+| `providers[].models[]` | 是 | 模型列表（id/name/reasoning/input/contextWindow/maxTokens） | 见示例 |
+| `llm.thinking_level` | 否 | 默认思考等级（off/minimal/low/medium/high/xhigh） | `medium` |
+| `llm.temperature` | 否 | 温度参数，默认 `0.7` | `0.7` |
+
+### 服务器与客户端配置
+
+| 字段 | 说明 | 默认值 |
+|------|------|--------|
+| `server.port` | 后端 Express 端口 | `3000` |
+| `client.port` | 前端 Vite dev server 端口 | `5173` |
+| `storage.data_dir` | 数据存储目录 | `./.doudou` |
 
 ### 日志配置
 
@@ -263,6 +286,9 @@ doudou-agent/
 ├── AGENT.md                       # 系统提示词（可自定义）
 ├── templates/
 │   └── com.doudou-agent.plist     # macOS launchd plist 模板
+├── scripts/                       # 构建/开发辅助脚本
+│   ├── dev-client.mjs             #   前端启动脚本（自动注入端口）
+│   └── resolve-ports.mjs          #   端口解析工具
 ├── src/
 │   ├── server/                    # 后端
 │   │   ├── index.ts               # Express 入口（导出 createApp/startServer）
@@ -271,15 +297,19 @@ doudou-agent/
 │   │   │   ├── session.ts         #   Session CRUD
 │   │   │   ├── config.ts          #   配置管理
 │   │   │   ├── logs.ts            #   日志查询
-│   │   │   └── tasks.ts           #   定时任务
+│   │   │   │   ├── tasks.ts           #   定时任务
+│   │   │   │   ├── stats.ts           #   统计看板
+│   │   │   │   └── template.ts        #   提示词模板
 │   │   ├── services/              # 业务逻辑
 │   │   │   ├── agent.ts           #   Agent 生命周期
 │   │   │   ├── config.ts          #   配置解析
 │   │   │   ├── session.ts         #   Session 存储
 │   │   │   ├── logger.ts          #   结构化日志
 │   │   │   ├── llm-tracker.ts     #   LLM 请求追踪
-│   │   │   └── task-scheduler.ts  #   定时任务调度器
-│   │   ├── tools/                 # 内置工具（6 个）
+│   │   │   ├── task-scheduler.ts  #   定时任务调度器
+│   │   │   ├── template.ts        #   提示词模板管理
+│   │   │   └── node-fs.ts         #   文件系统工具
+│   │   ├── tools/                 # 内置工具（7 个）
 │   │   └── middleware/            # 中间件
 │   ├── cli/                       # CLI 命令行工具
 │   │   ├── index.ts               # CLI 入口（commander）
@@ -302,6 +332,7 @@ doudou-agent/
 │       │   ├── Chat/              # 对话组件
 │       │   ├── SessionManager/    # Session 管理
 │       │   ├── Tasks/             # 定时任务管理
+│       │   ├── Dashboard/         # 首页统计看板
 │       │   ├── Logs/              # 日志面板
 │       │   └── Config/            # 配置组件
 │       ├── hooks/                 # 自定义 Hooks
