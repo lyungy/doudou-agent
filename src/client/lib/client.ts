@@ -134,33 +134,51 @@ export async function streamChat(
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedDone = false;
+  let receivedError = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true });
 
-    // 解析 SSE 事件
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      // 解析 SSE 事件（一行一行处理）
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    let eventType = "";
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        eventType = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        const dataStr = line.slice(6);
-        if (!eventType || eventType === "heartbeat") continue;
+      let eventType = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          const dataStr = line.slice(6);
+          if (!eventType || eventType === "heartbeat") continue;
 
-        try {
-          const data = JSON.parse(dataStr);
-          handleSSEEvent(eventType, data, callbacks);
-        } catch {
-          // 忽略解析失败的行
+          try {
+            const data = JSON.parse(dataStr);
+            handleSSEEvent(eventType, data, callbacks);
+            if (eventType === "done") receivedDone = true;
+            if (eventType === "error") receivedError = true;
+          } catch {
+            // 忽略解析失败的行
+          }
         }
       }
     }
+  } catch (err: any) {
+    // 网络中断（如 ERR_CONNECTION_RESET）或流读取异常
+    // 不直接抛出，由调用方根据 receivedDone/receivedError 判断是否需要重连
+    if (signal?.aborted) return; // 用户主动中止，静默退出
+    console.warn("[streamChat] SSE 流读取中断:", err.message);
+    // 既没收到 done 也没收到 error，说明是意外中断 → 通知调用方
+    if (!receivedDone && !receivedError) {
+      callbacks.onError(`连接中断: ${err.message || "网络异常"}`);
+    }
+  } finally {
+    // 确保 reader 被释放（浏览器兼容性）
+    try { reader.releaseLock(); } catch {}
   }
 }
 
@@ -243,28 +261,42 @@ export async function resumeChat(
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let receivedDone = false;
+  let receivedError = false;
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
-    let eventType = "";
-    for (const line of lines) {
-      if (line.startsWith("event: ")) {
-        eventType = line.slice(7).trim();
-      } else if (line.startsWith("data: ")) {
-        const dataStr = line.slice(6);
-        if (!eventType || eventType === "heartbeat") continue;
-        try {
-          const data = JSON.parse(dataStr);
-          handleResumeEvent(eventType, data, callbacks);
-        } catch {}
+      let eventType = "";
+      for (const line of lines) {
+        if (line.startsWith("event: ")) {
+          eventType = line.slice(7).trim();
+        } else if (line.startsWith("data: ")) {
+          const dataStr = line.slice(6);
+          if (!eventType || eventType === "heartbeat") continue;
+          try {
+            const data = JSON.parse(dataStr);
+            handleResumeEvent(eventType, data, callbacks);
+            if (eventType === "done") receivedDone = true;
+            if (eventType === "error") receivedError = true;
+          } catch {}
+        }
       }
     }
+  } catch (err: any) {
+    if (signal?.aborted) return;
+    console.warn("[resumeChat] SSE 流读取中断:", err.message);
+    if (!receivedDone && !receivedError) {
+      callbacks.onError(`连接中断: ${err.message || "网络异常"}`);
+    }
+  } finally {
+    try { reader.releaseLock(); } catch {}
   }
 }
 

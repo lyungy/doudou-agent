@@ -107,6 +107,13 @@ export function startServer(config: AppConfig): void {
     logger.info("system", `日志目录: ${resolveLogDir(config.logging)}`);
   });
 
+  // 禁用 HTTP Server 各级超时，防止 SSE 长连接被服务端主动断开
+  // Agent 多轮推理（LLM → 工具 → LLM）可能持续数分钟，期间需要保持连接
+  server.timeout = 0;                    // 禁用 socket 超时（默认 0，显式声明以明确意图）
+  server.headersTimeout = 60000;         // header 解析超时（默认 60s，保持不变）
+  server.keepAliveTimeout = 65000;       // keep-alive 超时（默认 5s 太短，改为 65s）
+  server.requestTimeout = 0;             // 禁用请求超时（Node 18+ 默认 300s，SSE 必须禁用）
+
   // 优雅关停：清理资源
   const shutdown = (signal: string) => {
     const logger = getLogger();

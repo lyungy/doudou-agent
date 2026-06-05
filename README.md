@@ -405,6 +405,19 @@ doudou-agent/
 5. 「定时任务」支持 Cron 调度，可设置超时时间
 6. 「日志」子菜单分为系统日志和任务日志，支持按级别/模块过滤
 
+## 🔌 SSE 连接稳定性设计
+
+Agent 多轮推理（LLM → 工具 → LLM → ...）可能持续数分钟，期间需要保持 SSE 长连接不被服务端/代理断开。本项目采用以下机制保障连接稳定：
+
+| 层 | 策略 | 配置 |
+|----|------|------|
+| HTTP Server | 禁用 socket/request 超时 | `server.timeout = 0`, `server.requestTimeout = 0` |
+| SSE 响应 | 禁用响应级别超时 | `res.setTimeout(0)` |
+| 心跳保活 | 每 8 秒发送 heartbeat 事件 | 工具执行期间也能保持连接活跃 |
+| 前端容错 | `reader.read()` 网络中断捕获 | 断线时触发 `onError` 而非静默丢失 |
+| 断线重连 | 刷新页面后自动 resume | 检测 Agent 仍在流式 → 重连 SSE 接收 catchup |
+| 消息持久化 | JSONL 兜底 | 即使 SSE 断开，消息仍写入 JSONL，刷新后可恢复 |
+
 ## 🖥️ CLI 命令参考
 
 ```bash

@@ -52,6 +52,14 @@ router.post("/stream", async (req: Request, res: Response) => {
     }
   };
 
+  // SSE 响应头：立即发送并禁用超时，防止长连接被服务端/代理断开
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.setTimeout(0);           // 禁用响应超时（Node 默认 120s）
+  try { res.flushHeaders(); } catch {}  // 立即发送 headers
+
   // 写 SSE 事件
   const sendEvent = (type: string, data: any) => {
     if (res.writableEnded) return;
@@ -59,8 +67,9 @@ router.post("/stream", async (req: Request, res: Response) => {
     try { (res as any).flush?.(); } catch {}
   };
 
-  // 心跳
-  const heartbeat = setInterval(() => sendEvent("heartbeat", {}), 15000);
+  // 心跳：8 秒间隔（多数代理/CDN 空闲超时 ≥ 60s，8s 足以保持连接活跃）
+  // 工具执行期间 Agent 内部无 text_delta 输出，心跳是唯一的保活手段
+  const heartbeat = setInterval(() => sendEvent("heartbeat", {}), 8000);
 
   // SSE 连接生命周期日志
   const connectionStart = Date.now();
@@ -178,7 +187,16 @@ router.post("/stream", async (req: Request, res: Response) => {
       : undefined;
 
     await agent.prompt(message, imageContents?.length ? imageContents : undefined);
-    await agent.waitForIdle();
+
+    try {
+      await agent.waitForIdle();
+    } catch (waitErr: any) {
+      // waitForIdle 异常（如 LLM 调用失败、工具执行超时）时兜底通知前端
+      logger.warn("sse", `waitForIdle 异常: ${waitErr.message}`, { sessionId });
+      if (!aborted) {
+        sendEvent("error", { error: waitErr.message || "Agent 执行异常" });
+      }
+    }
 
     // 兜底：确保所有新增 Agent 消息都已持久化（跳过历史消息和已写的）
     const allMsgs = agent.state.messages;
@@ -266,11 +284,13 @@ router.get("/resume/:sessionId", async (req: Request, res: Response) => {
     return res.status(404).json({ error: "Agent 不在流式状态" });
   }
 
-  // SSE headers
+  // SSE headers：禁用超时，防止重连期间被断开
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
+  res.setTimeout(0);           // 禁用响应超时
+  try { res.flushHeaders(); } catch {}
 
   const sendEvent = (type: string, data: any) => {
     if (res.writableEnded) return;
@@ -311,8 +331,8 @@ router.get("/resume/:sessionId", async (req: Request, res: Response) => {
     sendEvent("catchup", { text, thinking, toolCalls: toolCalls.length ? toolCalls : undefined });
   }
 
-  // 心跳
-  const heartbeat = setInterval(() => sendEvent("heartbeat", {}), 15000);
+  // 心跳：与 /stream 保持一致的 8 秒间隔
+  const heartbeat = setInterval(() => sendEvent("heartbeat", {}), 8000);
 
   let closed = false;
   req.socket.on("close", () => {
@@ -333,8 +353,10 @@ router.get("/resume/:sessionId", async (req: Request, res: Response) => {
   // 等待 Agent 执行完成
   try {
     await agent.waitForIdle();
-  } catch {
-    // 忽略
+  } catch (err: any) {
+    // waitForIdle 异常时也要通知前端，避免前端永远挂起
+    logger.warn("sse", `Resume waitForIdle 异常: ${err.message}`, { sessionId });
+    if (!closed) sendEvent("error", { error: err.message || "Agent 执行异常" });
   }
 
   unsubscribe();
