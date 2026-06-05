@@ -381,6 +381,7 @@ doudou-agent/
 | `GET` | `/api/logs` | 查询系统日志（支持 level/module/since 过滤） |
 | `GET` | `/api/logs/llm-requests` | 查询 LLM 请求记录（支持 status/modelId/since/offset 筛选） |
 | `GET` | `/api/logs/llm-requests/models` | 获取 LLM 请求涉及的模型 ID 列表 |
+| `GET` | `/api/logs/cumulative-tokens` | 累计指定 session 的 token 用量（需 sessionId 参数） |
 
 ### 定时任务
 
