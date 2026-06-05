@@ -31,30 +31,121 @@ function loadSystemPrompt(): string {
 /** 活跃的 Agent 实例映射（sessionId → Agent） */
 const agents = new Map<string, Agent>();
 
-/** 默认历史消息截断上限 */
-const DEFAULT_MAX_MESSAGES = 100;
+/** 默认历史消息截断上限（按 token 估算） */
+const DEFAULT_MAX_CONTEXT_TOKENS = 50000;
 
 /**
- * 截断历史消息，保留最近 maxMessages 条，不切断 turn 边界
- * 一个 turn 从 user 消息开始，截断时往前找最近的 user 消息作为起点
- * 避免出现孤立的 toolResult 或 assistant 消息
+ * 估算单条消息的 token 数
+ * 中文约 2-3 token/字，英文约 0.75 token/word，取 1/3 作为粗略估算
  */
-function truncateMessages(messages: any[], maxMessages: number): any[] {
-  if (messages.length <= maxMessages) return messages;
+function estimateMessageTokens(msg: any): number {
+  const content = msg?.content;
+  if (typeof content === "string") {
+    return Math.ceil(content.length / 3);
+  }
+  if (Array.isArray(content)) {
+    let total = 0;
+    for (const block of content) {
+      if (block.type === "text" && block.text) {
+        total += Math.ceil(block.text.length / 3);
+      } else if (block.type === "thinking" && (block.thinking || block.text)) {
+        total += Math.ceil((block.thinking || block.text).length / 3);
+      } else if (block.type === "toolResult" && block.result) {
+        const resultText = typeof block.result === "string"
+          ? block.result
+          : JSON.stringify(block.result);
+        total += Math.ceil(resultText.length / 3);
+      } else if (block.type === "toolCall" && block.arguments) {
+        total += Math.ceil(JSON.stringify(block.arguments).length / 3);
+      }
+    }
+    return total;
+  }
+  return 10; // 兜底
+}
 
-  // 从截断位置往前找最近的 user 消息作为起点
-  const cutoff = messages.length - maxMessages;
-  let start = cutoff;
-  while (start > 0 && messages[start]?.role !== "user") {
-    start--;
+/**
+ * 截断历史消息，按 token 预算控制上下文大小
+ * 策略：
+ *   1. 从最新消息往旧方向累加 token
+ *   2. 优先丢弃旧的 toolResult 消息（体积大、时效性低）
+ *   3. 保证不切断 turn 边界（从 user 消息开始）
+ *   4. 至少保留最近一个完整 turn
+ */
+function truncateMessages(messages: any[], maxTokens: number): any[] {
+  if (messages.length === 0) return messages;
+
+  // 先快速估算总 token
+  let totalTokens = 0;
+  for (const msg of messages) {
+    totalTokens += estimateMessageTokens(msg);
   }
 
-  const dropped = start;
+  if (totalTokens <= maxTokens) return messages;
+
+  getLogger().info("agent", `历史消息 token 超限：${totalTokens} > ${maxTokens}，开始截断`);
+
+  // 策略：从旧消息开始，优先丢弃 toolResult，然后丢弃旧 turn
+  // 标记每条消息是否保留
+  const keep = new Array(messages.length).fill(true);
+  let currentTokens = totalTokens;
+
+  // 第一轮：优先丢弃旧的 toolResult 消息（体积大、时效性低）
+  for (let i = 0; i < messages.length - 1; i++) {  // 保留最后一条不丢弃
+    if (currentTokens <= maxTokens) break;
+    const msg = messages[i];
+    const isToolResult = msg?.role === "tool" ||
+      (Array.isArray(msg?.content) && msg.content.some((b: any) => b.type === "toolResult"));
+    if (isToolResult) {
+      const tokens = estimateMessageTokens(msg);
+      keep[i] = false;
+      currentTokens -= tokens;
+    }
+  }
+
+  // 第二轮：如果仍然超限，从旧到新丢弃完整 turn（从 user 消息开始）
+  if (currentTokens > maxTokens) {
+    // 找到所有 user 消息的位置（turn 起点）
+    const turnStarts: number[] = [];
+    for (let i = 0; i < messages.length; i++) {
+      if (messages[i]?.role === "user" && keep[i]) {
+        turnStarts.push(i);
+      }
+    }
+
+    // 从最旧的 turn 开始丢弃
+    for (const turnStart of turnStarts) {
+      if (currentTokens <= maxTokens) break;
+
+      // 找这个 turn 的结束位置（下一个 user 消息之前）
+      const nextTurnStart = turnStarts.find((t) => t > turnStart) ?? messages.length;
+
+      // 计算这个 turn 的 token 数
+      let turnTokens = 0;
+      for (let i = turnStart; i < nextTurnStart; i++) {
+        if (keep[i]) {
+          turnTokens += estimateMessageTokens(messages[i]);
+        }
+      }
+
+      // 丢弃这个 turn
+      for (let i = turnStart; i < nextTurnStart; i++) {
+        keep[i] = false;
+      }
+      currentTokens -= turnTokens;
+    }
+  }
+
+  // 收集保留的消息
+  const result = messages.filter((_, i) => keep[i]);
+  const dropped = messages.length - result.length;
+  const finalTokens = currentTokens;
+
   if (dropped > 0) {
-    getLogger().info("agent", `历史消息截断：丢弃 ${dropped} 条，保留 ${messages.length - dropped} 条（上限 ${maxMessages}）`);
+    getLogger().info("agent", `历史消息截断：丢弃 ${dropped} 条，保留 ${result.length} 条（${finalTokens} tokens，上限 ${maxTokens}）`);
   }
 
-  return messages.slice(start);
+  return result;
 }
 
 /**
@@ -121,8 +212,8 @@ export async function getOrCreateAgent(
   const config = getConfig();
 
   // 历史消息截断：防止超长上下文撑爆 LLM context window
-  const maxMessages = config.context.max_messages || DEFAULT_MAX_MESSAGES;
-  historyMessages = truncateMessages(historyMessages, maxMessages);
+  const maxContextTokens = config.context.max_context_tokens || DEFAULT_MAX_CONTEXT_TOKENS;
+  historyMessages = truncateMessages(historyMessages, maxContextTokens);
 
   // 使用配置的 thinking level；模型不支持 thinking 时降级为 off
   let thinkingLevel = config.llm.thinking_level || "off";

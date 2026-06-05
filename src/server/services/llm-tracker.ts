@@ -248,7 +248,7 @@ class LLMTracker {
 
   /**
    * 获取指定 session 的 token 用量
-   * lastInputTokens: 最后一次请求的 inputTokens（即当前上下文占用量）
+   * lastInputTokens: 最近一次有值的请求的 inputTokens（即当前上下文占用量）
    * totalInputTokens: 所有请求 inputTokens 之和（用于成本统计）
    */
   getCumulativeTokens(sessionId: string): {
@@ -269,9 +269,9 @@ class LLMTracker {
       if (r.status === "completed") {
         totalInputTokens += r.inputTokens || 0;
         totalOutputTokens += r.outputTokens || 0;
-        if (requestCount === 0) {
-          // 优先使用 API 返回的实际 inputTokens（最准确的上下文大小）
-          // 其次使用 contextTokens（onPayload 回填的 API 返回值）
+        // 修复：取最近一条有 inputTokens 值的记录（而不是严格的第一条）
+        // 防止某次请求的 usage 未填充导致 lastInputTokens 为 0
+        if (lastInputTokens === 0 && (r.inputTokens || 0) > 0) {
           lastInputTokens = r.inputTokens || 0;
           contextTokens = r.inputTokens || r.contextTokens || 0;
         }
@@ -340,6 +340,7 @@ class LLMTracker {
 
   /**
    * 从 JSONL 文件加载历史记录（带内存缓存）
+   * 注意：只补充内存中没有的记录，不覆盖已有的（防止内存中已有的 inputTokens 等字段被磁盘数据覆盖丢失）
    */
   private loadFromDisk(): LLMRequestRecord[] {
     // 缓存命中
@@ -362,9 +363,20 @@ class LLMTracker {
           // 跳过解析失败的行
         }
       }
-      // 写入 completed 缓存供 getCompletedEntries 使用
-      // 只取最后 BUFFER_SIZE 条
-      this.completed = records.slice(-BUFFER_SIZE);
+
+      // 修复：只补充内存中没有的记录，不覆盖已有的
+      // 防止 moveToCompleted 中刚写入的 inputTokens 被磁盘旧数据覆盖
+      const existingIds = new Set(this.completed.map((r) => r.id));
+      const existingActiveIds = new Set(this.records.keys());
+      for (const r of records) {
+        if (!existingIds.has(r.id) && !existingActiveIds.has(r.id)) {
+          this.completed.push(r);
+        }
+      }
+      // 确保不超过 BUFFER_SIZE
+      if (this.completed.length > BUFFER_SIZE) {
+        this.completed = this.completed.slice(-BUFFER_SIZE);
+      }
       this.completedIndex = this.completed.length % BUFFER_SIZE;
 
       // 更新缓存

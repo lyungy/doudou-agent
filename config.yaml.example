@@ -69,4 +69,4 @@ logging:
 
 # 上下文配置
 context:
-  max_messages: 100        # 历史消息截断上限（条），防止超长上下文撑爆 LLM context window
+  max_context_tokens: 50000  # 历史消息截断的 token 预算上限，防止超长上下文撑爆 LLM context window

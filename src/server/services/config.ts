@@ -74,7 +74,8 @@ export interface LoggingConfig {
 
 /** 上下文配置 */
 export interface ContextConfig {
-  max_messages: number;
+  /** 历史消息截断的 token 预算上限 */
+  max_context_tokens: number;
 }
 
 /** 完整配置 */
@@ -158,7 +159,7 @@ export function loadConfig(path?: string): AppConfig {
       max_days: parsed.logging?.max_days || 7,
     },
     context: {
-      max_messages: parsed.context?.max_messages || 100,
+      max_context_tokens: parsed.context?.max_context_tokens || 50000,
     },
   };
 

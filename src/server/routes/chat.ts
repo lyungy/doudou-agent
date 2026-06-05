@@ -124,6 +124,9 @@ router.post("/stream", async (req: Request, res: Response) => {
       }
     }
 
+    // 提前捕获 usage（message_end 事件中 assistant 消息携带的 usage 最可靠）
+    let capturedUsage: { input?: number; output?: number } | null = null;
+
     // 订阅事件
     const unsubscribe = agent.subscribe((event: AgentEvent) => {
       if (aborted) return;
@@ -152,6 +155,11 @@ router.post("/stream", async (req: Request, res: Response) => {
         if (msg?.stopReason === "error" && msg?.errorMessage) {
           sendEvent("error", { error: msg.errorMessage });
           return;
+        }
+
+        // 在 message_end 中提前捕获 usage（此时 usage 最可靠）
+        if (msg?.role === "assistant" && msg?.usage) {
+          capturedUsage = msg.usage;
         }
 
         // 持久化完整消息（user / assistant）
@@ -210,12 +218,14 @@ router.post("/stream", async (req: Request, res: Response) => {
 
     if (!aborted) {
       // LLM 追踪：完成
-      // 从最后一条 assistant 消息获取 usage（pi-ai 的 Usage 结构）
+      // 优先使用 message_end 事件中提前捕获的 usage（最可靠）
+      // 兜底从 agent.state.messages 取（可能为空，因为 message_end 触发时 usage 可能未填充）
       const lastAssistant = allMsgs.filter((m: any) => m.role === "assistant").pop();
-      const usage = (lastAssistant as any)?.usage;
+      const fallbackUsage = (lastAssistant as any)?.usage;
+      const finalUsage = capturedUsage || fallbackUsage;
       tracker.onComplete(requestId, {
-        inputTokens: usage?.input,
-        outputTokens: usage?.output,
+        inputTokens: finalUsage?.input,
+        outputTokens: finalUsage?.output,
       });
 
       // 推送最终状态
