@@ -109,7 +109,8 @@ export interface ToolCallInfo {
 
 /** 累计 token 用量 */
 export interface CumulativeTokens {
-  lastInputTokens: number;   // 最后一次请求的 inputTokens（上下文占用量）
+  contextTokens: number;     // 从 payload 估算的当前上下文 token 数（最准确）
+  lastInputTokens: number;   // 最后一次请求的 inputTokens（LLM 实际处理量）
   totalInputTokens: number;  // 所有请求 inputTokens 之和
   totalOutputTokens: number; // 所有请求 outputTokens 之和
   requestCount: number;

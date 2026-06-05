@@ -9,6 +9,7 @@ import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import type { Model } from "@earendil-works/pi-ai";
 import { getConfig, getModelById, getApiKeyByModelId } from "./config.js";
 import { getLogger } from "./logger.js";
+import { getLLMTracker } from "./llm-tracker.js";
 import { tools } from "../tools/index.js";
 
 /** 默认系统提示词 */
@@ -142,9 +143,28 @@ export async function getOrCreateAgent(
     // 动态获取 apiKey：模型切换时 key 也要跟着变
     getApiKey: (): string => getApiKeyByModelId(agent.state.model?.id),
     toolExecution: "parallel",
-    // 请求 payload 日志：确认实际发给 LLM 的 model 字段
+    // 请求 payload 日志 + 记录 context token 数
     onPayload: (params: any) => {
       getLogger().info("llm", `请求 payload model=${params.model}, messages=${params.messages?.length || 0} 条`, { sessionId });
+      // 估算 context token 数（与 pi-ai 内部估算一致：text.length / 4）
+      let contextTokens = 0;
+      if (params.systemPrompt) contextTokens += Math.ceil(params.systemPrompt.length / 4);
+      if (Array.isArray(params.messages)) {
+        for (const msg of params.messages) {
+          const text = typeof msg.content === "string"
+            ? msg.content
+            : Array.isArray(msg.content)
+              ? msg.content.map((b: any) => b.text || b.thinking || JSON.stringify(b.arguments || "")).join("")
+              : "";
+          contextTokens += Math.ceil(text.length / 4);
+        }
+      }
+      // 写入 llm-tracker
+      const tracker = getLLMTracker();
+      const active = tracker.getActive().find((rec) => rec.sessionId === sessionId && rec.status === "connecting");
+      if (active) {
+        (active as any).contextTokens = contextTokens;
+      }
       return params;
     },
   });

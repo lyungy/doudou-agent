@@ -25,6 +25,7 @@ export interface LLMRequestRecord {
   ttft?: number;              // Time To First Token ms
   inputTokens?: number;
   outputTokens?: number;
+  contextTokens?: number;  // 从 payload 估算的 context token 数
   error?: string;
 }
 
@@ -251,6 +252,7 @@ class LLMTracker {
    * totalInputTokens: 所有请求 inputTokens 之和（用于成本统计）
    */
   getCumulativeTokens(sessionId: string): {
+    contextTokens: number;
     lastInputTokens: number;
     totalInputTokens: number;
     totalOutputTokens: number;
@@ -260,6 +262,7 @@ class LLMTracker {
     let totalInputTokens = 0;
     let totalOutputTokens = 0;
     let lastInputTokens = 0;
+    let contextTokens = 0;
     let requestCount = 0;
     // records 按 startTime 倒序，第一个 completed 就是最近一次
     for (const r of records) {
@@ -267,12 +270,13 @@ class LLMTracker {
         totalInputTokens += r.inputTokens || 0;
         totalOutputTokens += r.outputTokens || 0;
         if (requestCount === 0) {
-          lastInputTokens = r.inputTokens || 0;  // 最近一次请求的 inputTokens
+          lastInputTokens = r.inputTokens || 0;
+          contextTokens = (r as any).contextTokens || r.inputTokens || 0;
         }
         requestCount++;
       }
     }
-    return { lastInputTokens, totalInputTokens, totalOutputTokens, requestCount };
+    return { contextTokens, lastInputTokens, totalInputTokens, totalOutputTokens, requestCount };
   }
 
   // ============ 内部方法 ============

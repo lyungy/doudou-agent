@@ -39,9 +39,9 @@ export function ContextUsageBar() {
   // 无数据时不显示
   if (!tokens || tokens.requestCount === 0) return null;
 
-  // 上下文占用量 = 最后一次请求的 inputTokens（因为每次请求发送全部历史消息）
-  // cumulativeTokensBySession 存的是累计值，但显示最新一次的即可
-  const inputTokens = tokens.lastInputTokens;
+  // 优先使用 contextTokens（从 payload 估算，最准确）
+  // 其次使用 lastInputTokens（LLM 实际处理量，不含 thinking 但更精确）
+  const inputTokens = tokens.contextTokens || tokens.lastInputTokens;
   const percentage = Math.min((inputTokens / contextWindow) * 100, 100);
   const colors = getUsageColor(percentage);
 
