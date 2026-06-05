@@ -2,7 +2,9 @@
  * 配置路由：获取和更新 LLM 配置 + 系统提示词
  */
 import { Router } from "express";
-import { getConfig, saveConfig, listModels, readSystemPrompt, writeSystemPrompt, type AppConfig, type ProviderConfig } from "../services/config.js";
+import { getConfig, saveConfig, listModels, readSystemPrompt, writeSystemPrompt, getModelById, type AppConfig, type ProviderConfig } from "../services/config.js";
+import { getAllAgents } from "../services/agent.js";
+import { getLogger } from "../services/logger.js";
 
 const router = Router();
 
@@ -49,10 +51,10 @@ router.put("/", (req, res) => {
         ...updates.llm,
         // 保留掩码 api_key 的 provider 原值
         providers: updates.llm?.providers
-          ? updates.llm.providers.map((p: any, i: number) => ({
+          ? updates.llm.providers.map((p: any) => ({
               ...p,
               api_key: (p.api_key && p.api_key.startsWith("••••••"))
-                ? current.llm.providers[i]?.api_key || p.api_key
+                ? current.llm.providers.find((op) => op.name === p.name)?.api_key || p.api_key
                 : p.api_key,
             }))
           : current.llm.providers,
@@ -65,7 +67,22 @@ router.put("/", (req, res) => {
     };
 
     saveConfig(newConfig);
-    res.json({ ok: true, message: "配置已保存，重启后生效" });
+
+    // S-07: 配置热更新 — 更新所有缓存 Agent 的 model，使其立即生效
+    try {
+      const newModel = getModelById();
+      const agents = getAllAgents();
+      for (const [id, agent] of agents) {
+        if (agent.state.model?.id !== newModel.id) {
+          getLogger().info("config", `热更新 Agent ${id} 模型: ${agent.state.model?.id} → ${newModel.id}`);
+          agent.state.model = newModel;
+        }
+      }
+    } catch {
+      // 模型解析失败不影响配置保存
+    }
+
+    res.json({ ok: true, message: "配置已保存" });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

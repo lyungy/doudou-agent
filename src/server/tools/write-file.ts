@@ -1,9 +1,9 @@
 /**
- * 写入文件工具
+ * 写入文件工具（异步）
  */
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFile, mkdir } from "fs/promises";
 import { dirname } from "path";
 
 const WriteFileParams = Type.Object({
@@ -20,9 +20,9 @@ export const writeFileTool: AgentTool<typeof WriteFileParams> = {
   execute: async (toolCallId, params, signal, onUpdate) => {
     // 确保目录存在
     const dir = dirname(params.path);
-    mkdirSync(dir, { recursive: true });
+    await mkdir(dir, { recursive: true });
 
-    writeFileSync(params.path, params.content, "utf-8");
+    await writeFile(params.path, params.content, "utf-8");
 
     return {
       content: [{ type: "text", text: `已写入文件: ${params.path} (${params.content.length} 字符)` }],

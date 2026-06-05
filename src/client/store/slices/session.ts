@@ -99,6 +99,8 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
     try {
       const status = await api.checkChatStatus(id);
       if (status.streaming) {
+        // S-02: 提前设置 isStreaming，防止 resume 期间用户触发 sendMessage
+        set({ isStreaming: true });
         await get()._resumeStream(id);
       }
     } catch {

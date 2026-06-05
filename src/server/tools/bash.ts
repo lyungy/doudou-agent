@@ -20,6 +20,14 @@ export const bashTool: AgentTool<typeof BashParams> = {
   execute: async (toolCallId, params, signal, onUpdate) => {
     const timeout = (params.timeout || 60) * 1000;
 
+    // signal 已 abort 时立即终止，不启动进程
+    if (signal?.aborted) {
+      return {
+        content: [{ type: "text", text: "命令已取消" }],
+        details: { command: params.command, exitCode: -1, aborted: true },
+      };
+    }
+
     return new Promise((resolve) => {
       const child = exec(
         params.command,
@@ -52,7 +60,7 @@ export const bashTool: AgentTool<typeof BashParams> = {
       // 支持 abort signal
       signal?.addEventListener("abort", () => {
         child.kill("SIGTERM");
-      });
+      }, { once: true });
     });
   },
 };

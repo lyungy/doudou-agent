@@ -1,9 +1,9 @@
 /**
- * 列出目录内容工具
+ * 列出目录内容工具（异步）
  */
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { readdirSync, statSync } from "fs";
+import { readdir, stat } from "fs/promises";
 import { join } from "path";
 
 const ListDirParams = Type.Object({
@@ -18,7 +18,7 @@ export const listDirectoryTool: AgentTool<typeof ListDirParams> = {
   parameters: ListDirParams,
 
   execute: async (toolCallId, params, signal, onUpdate) => {
-    let entries = readdirSync(params.path, { withFileTypes: true });
+    let entries = await readdir(params.path, { withFileTypes: true });
 
     // 过滤隐藏文件
     if (!params.show_hidden) {
@@ -32,18 +32,18 @@ export const listDirectoryTool: AgentTool<typeof ListDirParams> = {
       return a.name.localeCompare(b.name);
     });
 
-    const lines = entries.map((entry) => {
+    const lines = await Promise.all(entries.map(async (entry) => {
       const prefix = entry.isDirectory() ? "📁" : "📄";
       const fullPath = join(params.path, entry.name);
 
       try {
-        const stat = statSync(fullPath);
-        const size = entry.isDirectory() ? "" : ` (${formatSize(stat.size)})`;
+        const s = await stat(fullPath);
+        const size = entry.isDirectory() ? "" : ` (${formatSize(s.size)})`;
         return `${prefix} ${entry.name}${size}`;
       } catch {
         return `${prefix} ${entry.name}`;
       }
-    });
+    }));
 
     return {
       content: [{ type: "text", text: lines.join("\n") || "(空目录)" }],

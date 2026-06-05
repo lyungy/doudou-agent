@@ -1,9 +1,9 @@
 /**
- * 编辑文件工具（精确替换）
+ * 编辑文件工具（异步，精确替换）
  */
 import { Type } from "typebox";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFile, writeFile, access } from "fs/promises";
 
 const EditFileParams = Type.Object({
   path: Type.String({ description: "要编辑的文件路径" }),
@@ -18,11 +18,13 @@ export const editFileTool: AgentTool<typeof EditFileParams> = {
   parameters: EditFileParams,
 
   execute: async (toolCallId, params, signal, onUpdate) => {
-    if (!existsSync(params.path)) {
+    try {
+      await access(params.path);
+    } catch {
       throw new Error(`文件不存在: ${params.path}`);
     }
 
-    const content = readFileSync(params.path, "utf-8");
+    const content = await readFile(params.path, "utf-8");
 
     if (!content.includes(params.old_text)) {
       throw new Error(`在文件 ${params.path} 中未找到要替换的文本`);
@@ -35,7 +37,7 @@ export const editFileTool: AgentTool<typeof EditFileParams> = {
     }
 
     const newContent = content.replace(params.old_text, params.new_text);
-    writeFileSync(params.path, newContent, "utf-8");
+    await writeFile(params.path, newContent, "utf-8");
 
     return {
       content: [{ type: "text", text: `已编辑文件: ${params.path}` }],

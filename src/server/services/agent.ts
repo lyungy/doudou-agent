@@ -373,6 +373,11 @@ export function getAgentForResume(sessionId: string): Agent | null {
   return agents.get(sessionId) || null;
 }
 
+/** 获取所有活跃 Agent 实例（供配置热更新使用） */
+export function getAllAgents(): Map<string, Agent> {
+  return agents;
+}
+
 /**
  * 从 Agent 当前状态估算 context token 数
  * 当 llm-tracker 中没有 API 返回的 inputTokens 时，用此函数兜底
