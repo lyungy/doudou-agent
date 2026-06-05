@@ -379,7 +379,8 @@ doudou-agent/
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/logs` | 查询系统日志（支持 level/module/since 过滤） |
-| `GET` | `/api/logs/llm-requests` | 查询 LLM 请求记录 |
+| `GET` | `/api/logs/llm-requests` | 查询 LLM 请求记录（支持 status/modelId/since/offset 筛选） |
+| `GET` | `/api/logs/llm-requests/models` | 获取 LLM 请求涉及的模型 ID 列表 |
 
 ### 定时任务
 
@@ -391,7 +392,8 @@ doudou-agent/
 | `DELETE` | `/api/tasks/:id` | 删除任务 |
 | `POST` | `/api/tasks/:id/toggle` | 启用/禁用任务 |
 | `POST` | `/api/tasks/:id/trigger` | 手动触发执行 |
-| `GET` | `/api/tasks/runs` | 查询所有执行日志 |
+| `GET` | `/api/tasks/runs` | 查询所有执行日志（支持 status/since/offset 筛选） |
+| `GET` | `/api/tasks/runs/stats` | 查询任务执行统计（成功率、平均耗时） |
 | `GET` | `/api/tasks/:id/runs` | 查询指定任务执行日志 |
 
 ## 💡 使用技巧
