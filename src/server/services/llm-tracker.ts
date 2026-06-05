@@ -23,9 +23,9 @@ export interface LLMRequestRecord {
   endTime?: number;
   duration?: number;          // 总耗时 ms
   ttft?: number;              // Time To First Token ms
-  inputTokens?: number;
-  outputTokens?: number;
-  contextTokens?: number;  // 从 payload 估算的 context token 数
+  inputTokens?: number;       // LLM API 返回的实际输入 token 数
+  outputTokens?: number;      // LLM API 返回的实际输出 token 数
+  contextTokens?: number;     // 请求时的上下文 token 数（API 返回的 inputTokens）
   error?: string;
 }
 
@@ -270,8 +270,10 @@ class LLMTracker {
         totalInputTokens += r.inputTokens || 0;
         totalOutputTokens += r.outputTokens || 0;
         if (requestCount === 0) {
+          // 优先使用 API 返回的实际 inputTokens（最准确的上下文大小）
+          // 其次使用 contextTokens（onPayload 回填的 API 返回值）
           lastInputTokens = r.inputTokens || 0;
-          contextTokens = (r as any).contextTokens || r.inputTokens || 0;
+          contextTokens = r.inputTokens || r.contextTokens || 0;
         }
         requestCount++;
       }

@@ -143,28 +143,9 @@ export async function getOrCreateAgent(
     // 动态获取 apiKey：模型切换时 key 也要跟着变
     getApiKey: (): string => getApiKeyByModelId(agent.state.model?.id),
     toolExecution: "parallel",
-    // 请求 payload 日志 + 记录 context token 数
+    // 请求 payload 日志
     onPayload: (params: any) => {
       getLogger().info("llm", `请求 payload model=${params.model}, messages=${params.messages?.length || 0} 条`, { sessionId });
-      // 估算 context token 数（与 pi-ai 内部估算一致：text.length / 4）
-      let contextTokens = 0;
-      if (params.systemPrompt) contextTokens += Math.ceil(params.systemPrompt.length / 4);
-      if (Array.isArray(params.messages)) {
-        for (const msg of params.messages) {
-          const text = typeof msg.content === "string"
-            ? msg.content
-            : Array.isArray(msg.content)
-              ? msg.content.map((b: any) => b.text || b.thinking || JSON.stringify(b.arguments || "")).join("")
-              : "";
-          contextTokens += Math.ceil(text.length / 4);
-        }
-      }
-      // 写入 llm-tracker
-      const tracker = getLLMTracker();
-      const active = tracker.getActive().find((rec) => rec.sessionId === sessionId && rec.status === "connecting");
-      if (active) {
-        (active as any).contextTokens = contextTokens;
-      }
       return params;
     },
   });
@@ -217,14 +198,16 @@ export function getAgentForResume(sessionId: string): Agent | null {
 
 /**
  * 从 Agent 当前状态估算 context token 数
- * 当 llm-tracker 中没有 contextTokens 时，用此函数兜底
+ * 当 llm-tracker 中没有 API 返回的 inputTokens 时，用此函数兜底
+ * 注意：text.length / 3 是粗略估算（中文约 2-3 token/字，英文约 0.75 token/word）
+ * 实际 token 数以 LLM API 返回的 inputTokens 为准
  */
 export function estimateContextTokens(sessionId: string): number | null {
   const agent = agents.get(sessionId);
   if (!agent) return null;
   let tokens = 0;
   if (agent.state.systemPrompt) {
-    tokens += Math.ceil(agent.state.systemPrompt.length / 4);
+    tokens += Math.ceil(agent.state.systemPrompt.length / 3);
   }
   for (const msg of agent.state.messages) {
     const m = msg as any;
@@ -233,7 +216,7 @@ export function estimateContextTokens(sessionId: string): number | null {
       : Array.isArray(m.content)
         ? m.content.map((b: any) => b.text || b.thinking || JSON.stringify(b.arguments || "")).join("")
         : "";
-    tokens += Math.ceil(text.length / 4);
+    tokens += Math.ceil(text.length / 3);
   }
   return tokens;
 }

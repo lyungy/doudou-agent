@@ -39,9 +39,9 @@ export function ContextUsageBar() {
   // 无数据时不显示
   if (!tokens || tokens.requestCount === 0) return null;
 
-  // 优先使用 contextTokens（从 payload 估算，最准确）
-  // 其次使用 lastInputTokens（LLM 实际处理量，不含 thinking 但更精确）
-  const inputTokens = tokens.contextTokens || tokens.lastInputTokens;
+  // 优先使用 lastInputTokens（LLM API 返回的实际输入 token 数，最准确）
+  // 其次使用 contextTokens（onPayload 回填值，作为兜底）
+  const inputTokens = tokens.lastInputTokens || tokens.contextTokens;
   const percentage = Math.min((inputTokens / contextWindow) * 100, 100);
   const colors = getUsageColor(percentage);
 
