@@ -1,19 +1,57 @@
 /**
  * 消息列表组件
- * 简单自动滚动：消息更新时滚到底部
+ * 智能滚动：用户在底部时自动跟随，向上滚动时锁定位置
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { useChat } from "../../hooks/useChat";
 import { useAppStore } from "../../store";
 
+const BOTTOM_THRESHOLD = 50;
+
 export function MessageList() {
   const { messages, isStreaming, regenerate } = useChat();
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
 
+  /** 检测是否在底部 */
+  const checkAtBottom = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < BOTTOM_THRESHOLD;
+  }, []);
+
+  /** 监听滚动事件 */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "instant" });
-  }, [messages]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const handleScroll = () => setIsAtBottom(checkAtBottom());
+    el.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+    return () => el.removeEventListener("scroll", handleScroll);
+  }, [checkAtBottom]);
+
+  /** 消息更新时：仅底部状态下自动跟随 */
+  useEffect(() => {
+    if (isAtBottom) {
+      const el = scrollRef.current;
+      if (el) el.scrollTop = el.scrollHeight;
+    }
+  }, [messages, isAtBottom]);
+
+  /** 流式输出期间持续跟随 */
+  useEffect(() => {
+    if (!isStreaming || !isAtBottom) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    let rafId: number;
+    const tick = () => {
+      if (checkAtBottom()) el.scrollTop = el.scrollHeight;
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isStreaming, isAtBottom, checkAtBottom]);
 
   if (messages.length === 0) {
     return (
@@ -43,23 +81,40 @@ export function MessageList() {
   const lastAssistantId = [...messages].reverse().find((m) => m.type === "assistant")?.id;
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 py-6">
-        {messages.map((msg) => {
-          const isLastAssistant = msg.type === "assistant" && msg.id === lastAssistantId;
-          return (
-            <div key={msg.id} className="group">
-              <MessageBubble
-                message={msg}
-                isStreaming={isLastAssistant && isStreaming}
-                canRegenerate={isLastAssistant && !isStreaming}
-                onRegenerate={regenerate}
-              />
-            </div>
-          );
-        })}
-        <div ref={endRef} />
+    <>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          {messages.map((msg) => {
+            const isLastAssistant = msg.type === "assistant" && msg.id === lastAssistantId;
+            return (
+              <div key={msg.id} className="group">
+                <MessageBubble
+                  message={msg}
+                  isStreaming={isLastAssistant && isStreaming}
+                  canRegenerate={isLastAssistant && !isStreaming}
+                  onRegenerate={regenerate}
+                />
+              </div>
+            );
+          })}
+        </div>
       </div>
-    </div>
+
+      {/* 回到底部按钮 — fixed 定位，相对于视口，不被任何容器裁剪 */}
+      {messages.length > 0 && !isAtBottom && (
+        <button
+          onClick={() => {
+            const el = scrollRef.current;
+            if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+          }}
+          className="fixed bottom-24 right-8 z-50 flex items-center gap-1.5 px-3 py-2 bg-white/90 backdrop-blur-sm border border-neutral-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all cursor-pointer text-neutral-600 text-sm"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+          <span>回到底部</span>
+        </button>
+      )}
+    </>
   );
 }
