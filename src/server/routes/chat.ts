@@ -7,7 +7,7 @@ import type { Request, Response } from "express";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 import { getModelById } from "../services/config.js";
 import { getSession, updateSession, openSession } from "../services/session.js";
-import { getOrCreateAgent, abortAgent, getAgentState } from "../services/agent.js";
+import { getOrCreateAgent, abortAgent, getAgentState, withSessionLock } from "../services/agent.js";
 import { getLLMTracker } from "../services/llm-tracker.js";
 import { getLogger } from "../services/logger.js";
 
@@ -105,147 +105,149 @@ router.post("/stream", async (req: Request, res: Response) => {
   });
 
   try {
-    const model = getModelById(modelId || sessionMeta.modelId || undefined);
-    logger.debug("sse", `解析模型: ${model.id} (请求modelId=${modelId}, sessionModelId=${sessionMeta.modelId})`, { sessionId });
-    const { agent, historyCount } = await getOrCreateAgent(sessionId, model);
-    agentInstance = agent;
-    logger.info("sse", `Agent 实际模型: ${agent.state.model?.id}`, { sessionId });
+    await withSessionLock(sessionId, async () => {
+      const model = getModelById(modelId || sessionMeta.modelId || undefined);
+      logger.debug("sse", `解析模型: ${model.id} (请求modelId=${modelId}, sessionModelId=${sessionMeta.modelId})`, { sessionId });
+      const { agent, historyCount } = await getOrCreateAgent(sessionId, model);
+      agentInstance = agent;
+      logger.info("sse", `Agent 实际模型: ${agent.state.model?.id}`, { sessionId });
 
-    // 支持请求级 thinkingLevel 覆盖
-    if (thinkingLevel && typeof thinkingLevel === "string") {
-      const validLevels = ["off", "minimal", "low", "medium", "high", "xhigh"];
-      if (validLevels.includes(thinkingLevel)) {
-        // 模型不支持 thinking 时降级
-        if (thinkingLevel !== "off" && !model.reasoning) {
-          agent.state.thinkingLevel = "off";
-        } else {
-          agent.state.thinkingLevel = thinkingLevel as any;
-        }
-      }
-    }
-
-    // 捕获 usage：取最后一轮 LLM 的 usage（最可靠，代表当前上下文大小）
-    let capturedUsage: { input?: number; output?: number } | null = null;
-
-    // 订阅事件
-    const unsubscribe = agent.subscribe((event: AgentEvent) => {
-      if (aborted) return;
-
-      if (event.type === "message_update") {
-        const ae = (event as any).assistantMessageEvent;
-
-        // 首 token 追踪
-        if (!firstTokenSent && ae?.type === "text_delta") {
-          firstTokenSent = true;
-          tracker.onFirstToken(requestId);
-          sendEvent("llm_status", { status: "streaming", requestId, ttft: Date.now() - connectionStart });
-        }
-
-        // 错误消息
-        if (ae?.type === "error") {
-          tracker.onError(requestId, ae.error);
-          sendEvent("llm_status", { status: "error", requestId, error: ae.error });
+      // 支持请求级 thinkingLevel 覆盖
+      if (thinkingLevel && typeof thinkingLevel === "string") {
+        const validLevels = ["off", "minimal", "low", "medium", "high", "xhigh"];
+        if (validLevels.includes(thinkingLevel)) {
+          // 模型不支持 thinking 时降级
+          if (thinkingLevel !== "off" && !model.reasoning) {
+            agent.state.thinkingLevel = "off";
+          } else {
+            agent.state.thinkingLevel = thinkingLevel as any;
+          }
         }
       }
 
-      if (event.type === "message_end") {
-        const msg = (event as any).message;
+      // 捕获 usage：取最后一轮 LLM 的 usage（最可靠，代表当前上下文大小）
+      let capturedUsage: { input?: number; output?: number } | null = null;
 
-        // 错误消息 → 推 error 事件
-        if (msg?.stopReason === "error" && msg?.errorMessage) {
-          sendEvent("error", { error: msg.errorMessage });
-          return;
+      // 订阅事件
+      const unsubscribe = agent.subscribe((event: AgentEvent) => {
+        if (aborted) return;
+
+        if (event.type === "message_update") {
+          const ae = (event as any).assistantMessageEvent;
+
+          // 首 token 追踪
+          if (!firstTokenSent && ae?.type === "text_delta") {
+            firstTokenSent = true;
+            tracker.onFirstToken(requestId);
+            sendEvent("llm_status", { status: "streaming", requestId, ttft: Date.now() - connectionStart });
+          }
+
+          // 错误消息
+          if (ae?.type === "error") {
+            tracker.onError(requestId, ae.error);
+            sendEvent("llm_status", { status: "error", requestId, error: ae.error });
+          }
         }
 
-        // 在 message_end 中捕获 usage（覆盖式，取最后一轮的值）
-        if (msg?.role === "assistant" && msg?.usage) {
-          capturedUsage = msg.usage;
+        if (event.type === "message_end") {
+          const msg = (event as any).message;
+
+          // 错误消息 → 推 error 事件
+          if (msg?.stopReason === "error" && msg?.errorMessage) {
+            sendEvent("error", { error: msg.errorMessage });
+            return;
+          }
+
+          // 在 message_end 中捕获 usage（覆盖式，取最后一轮的值）
+          if (msg?.role === "assistant" && msg?.usage) {
+            capturedUsage = msg.usage;
+          }
+
+          // 持久化完整消息（user / assistant）
+          if (msg && (msg.role === "user" || msg.role === "assistant")) {
+            persistMessage(msg);
+          }
         }
 
-        // 持久化完整消息（user / assistant）
-        if (msg && (msg.role === "user" || msg.role === "assistant")) {
-          persistMessage(msg);
+        // Tool 调用日志
+        if (event.type === "tool_execution_start") {
+          logger.info("agent", "Tool 调用开始", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId });
+        }
+        if (event.type === "tool_execution_end") {
+          logger.info("agent", "Tool 调用完成", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId, isError: event.isError });
+        }
+
+        const sseData = convertToSSE(event);
+        if (sseData) {
+          sendEvent(sseData.type, sseData.data);
+          sseEventCount++;
+        }
+      });
+
+      // 构造图片内容（pi-ai ImageContent 格式）
+      const imageContents = Array.isArray(images)
+        ? images
+            .filter((img: any) => img && img.data && img.mimeType)
+            .map((img: any) => ({
+              type: "image" as const,
+              data: img.data,
+              mimeType: img.mimeType,
+            }))
+        : undefined;
+
+      await agent.prompt(message, imageContents?.length ? imageContents : undefined);
+
+      try {
+        await agent.waitForIdle();
+      } catch (waitErr: any) {
+        // waitForIdle 异常（如 LLM 调用失败、工具执行超时）时兜底通知前端
+        logger.warn("sse", `waitForIdle 异常: ${waitErr.message}`, { sessionId });
+        if (!aborted) {
+          sendEvent("error", { error: waitErr.message || "Agent 执行异常" });
         }
       }
 
-      // Tool 调用日志
-      if (event.type === "tool_execution_start") {
-        logger.info("agent", "Tool 调用开始", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId });
+      // 兜底：确保所有新增 Agent 消息都已持久化（跳过历史消息和已写的）
+      const allMsgs = agent.state.messages;
+      const fallbackStart = Math.max(historyCount, persistCount);
+      if (fallbackStart < allMsgs.length) {
+        logger.info("sse", `兜底持久化: index ${fallbackStart}~${allMsgs.length - 1}（historyCount=${historyCount}, persistCount=${persistCount}）`, { sessionId });
       }
-      if (event.type === "tool_execution_end") {
-        logger.info("agent", "Tool 调用完成", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId, isError: event.isError });
+      for (let i = fallbackStart; i < allMsgs.length; i++) {
+        await persistMessage(allMsgs[i]);
       }
 
-      const sseData = convertToSSE(event);
-      if (sseData) {
-        sendEvent(sseData.type, sseData.data);
-        sseEventCount++;
-      }
-    });
-
-    // 构造图片内容（pi-ai ImageContent 格式）
-    const imageContents = Array.isArray(images)
-      ? images
-          .filter((img: any) => img && img.data && img.mimeType)
-          .map((img: any) => ({
-            type: "image" as const,
-            data: img.data,
-            mimeType: img.mimeType,
-          }))
-      : undefined;
-
-    await agent.prompt(message, imageContents?.length ? imageContents : undefined);
-
-    try {
-      await agent.waitForIdle();
-    } catch (waitErr: any) {
-      // waitForIdle 异常（如 LLM 调用失败、工具执行超时）时兜底通知前端
-      logger.warn("sse", `waitForIdle 异常: ${waitErr.message}`, { sessionId });
       if (!aborted) {
-        sendEvent("error", { error: waitErr.message || "Agent 执行异常" });
+        // LLM 追踪：完成
+        // 优先使用 message_end 事件中捕获的 usage（最可靠）
+        // 兜底从 agent.state.messages 取最后一条 assistant 消息的 usage
+        const lastAssistant = allMsgs.filter((m: any) => m.role === "assistant").pop();
+        const fallbackUsage = (lastAssistant as any)?.usage;
+        const finalUsage = capturedUsage || fallbackUsage;
+        // 实际上下文大小 = inputTokens + cacheRead（非缓存部分 + 缓存命中部分）
+        const actualInputTokens = (finalUsage?.input || 0) + ((finalUsage as any)?.cacheRead || 0);
+        tracker.onComplete(requestId, {
+          inputTokens: actualInputTokens || undefined,
+          outputTokens: finalUsage?.output,
+        });
+
+        // 推送最终状态
+        const record = tracker.getById(requestId);
+        sendEvent("llm_status", {
+          status: "completed",
+          requestId,
+          duration: record?.duration,
+          ttft: record?.ttft,
+          inputTokens: record?.inputTokens,
+          outputTokens: record?.outputTokens,
+        });
+
+        sendEvent("done", { reason: "stop" });
       }
-    }
 
-    // 兜底：确保所有新增 Agent 消息都已持久化（跳过历史消息和已写的）
-    const allMsgs = agent.state.messages;
-    const fallbackStart = Math.max(historyCount, persistCount);
-    if (fallbackStart < allMsgs.length) {
-      logger.info("sse", `兜底持久化: index ${fallbackStart}~${allMsgs.length - 1}（historyCount=${historyCount}, persistCount=${persistCount}）`, { sessionId });
-    }
-    for (let i = fallbackStart; i < allMsgs.length; i++) {
-      await persistMessage(allMsgs[i]);
-    }
-
-    if (!aborted) {
-      // LLM 追踪：完成
-      // 优先使用 message_end 事件中捕获的 usage（最可靠）
-      // 兜底从 agent.state.messages 取最后一条 assistant 消息的 usage
-      const lastAssistant = allMsgs.filter((m: any) => m.role === "assistant").pop();
-      const fallbackUsage = (lastAssistant as any)?.usage;
-      const finalUsage = capturedUsage || fallbackUsage;
-      // 实际上下文大小 = inputTokens + cacheRead（非缓存部分 + 缓存命中部分）
-      const actualInputTokens = (finalUsage?.input || 0) + ((finalUsage as any)?.cacheRead || 0);
-      tracker.onComplete(requestId, {
-        inputTokens: actualInputTokens || undefined,
-        outputTokens: finalUsage?.output,
-      });
-
-      // 推送最终状态
-      const record = tracker.getById(requestId);
-      sendEvent("llm_status", {
-        status: "completed",
-        requestId,
-        duration: record?.duration,
-        ttft: record?.ttft,
-        inputTokens: record?.inputTokens,
-        outputTokens: record?.outputTokens,
-      });
-
-      sendEvent("done", { reason: "stop" });
-    }
-
-    updateSession(sessionId, { messageCount: agent.state.messages.length, modelId: modelId || undefined });
-    unsubscribe();
+      updateSession(sessionId, { messageCount: agent.state.messages.length, modelId: modelId || undefined });
+      unsubscribe();
+    });
   } catch (err: any) {
     logger.error("sse", "对话处理异常", { sessionId, error: err.message });
     tracker.onError(requestId, err.message);

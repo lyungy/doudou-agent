@@ -12,6 +12,27 @@ import { getLogger } from "./logger.js";
 import { getLLMTracker } from "./llm-tracker.js";
 import { tools } from "../tools/index.js";
 
+/** Per-session 锁：确保同一 session 的 Agent 操作串行化，防止 TOCTOU 竞态 */
+const sessionLocks = new Map<string, Promise<any>>();
+
+/**
+ * 获取 per-session 锁，确保同一 session 的操作串行执行
+ * 后一个调用会等待前一个完成后才开始，防止 getOrCreateAgent + prompt 并发
+ */
+export async function withSessionLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+  const prev = sessionLocks.get(sessionId) || Promise.resolve();
+  const current = prev.then(fn, fn);
+  sessionLocks.set(sessionId, current);
+  try {
+    return await current;
+  } finally {
+    // 只有当前 promise 仍是锁链末尾时才清理，避免删除后续调用的锁
+    if (sessionLocks.get(sessionId) === current) {
+      sessionLocks.delete(sessionId);
+    }
+  }
+}
+
 /** 默认系统提示词 */
 const DEFAULT_SYSTEM_PROMPT = "你是一个有用的 AI 助手。请用中文回答。";
 
@@ -245,17 +266,6 @@ export async function getOrCreateAgent(
 ): Promise<{ agent: Agent; historyCount: number }> {
   const existing = agents.get(sessionId);
   if (existing) {
-    // 如果旧 Agent 仍在执行中（SSE 断开后后台继续），等它完成后再复用
-    // 避免两个 prompt 并发导致消息混乱
-    if (existing.state.isStreaming) {
-      getLogger().info("agent", `旧 Agent 仍在执行，等待完成后复用`, { sessionId });
-      try {
-        await existing.waitForIdle();
-      } catch {
-        // 忽略等待错误
-      }
-    }
-
     // 模型热切换：如果模型变了，更新 Agent 的 model
     if (existing.state.model?.id !== model.id) {
       getLogger().info("agent", `模型热切换: ${existing.state.model?.id} → ${model.id}`, { sessionId });
