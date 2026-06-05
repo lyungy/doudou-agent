@@ -4,7 +4,6 @@
  */
 import { useEffect, useRef } from "react";
 import { MessageBubble } from "./MessageBubble";
-import { ContextUsageBar } from "./ContextUsageBar";
 import { useChat } from "../../hooks/useChat";
 import { useAppStore } from "../../store";
 
@@ -45,7 +44,6 @@ export function MessageList() {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <ContextUsageBar />
       <div className="max-w-4xl mx-auto px-4 py-6">
         {messages.map((msg) => {
           const isLastAssistant = msg.type === "assistant" && msg.id === lastAssistantId;

@@ -13,6 +13,7 @@ import { SystemPromptEditor } from "./components/Config/SystemPromptEditor";
 import { TemplateManager } from "./components/Config/TemplateManager";
 import { PromptTemplates } from "./components/Chat/PromptTemplates";
 import { LLMStatusBar } from "./components/Chat/LLMStatusBar";
+import { ContextUsageBar } from "./components/Chat/ContextUsageBar";
 import { LogPanel } from "./components/Logs/LogPanel";
 import { TaskPanel } from "./components/Tasks/TaskPanel";
 import { TaskLogList } from "./components/Tasks/TaskLogList";
@@ -155,6 +156,7 @@ function ChatView() {
     <>
       <MessageList />
       <LLMStatusBar />
+      <ContextUsageBar />
       <InputBox />
     </>
   );
