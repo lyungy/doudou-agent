@@ -5,12 +5,14 @@ import { useState, useEffect } from "react";
 import { useAppStore } from "../../store";
 import type { Task } from "../../types";
 import { TaskForm } from "./TaskForm";
+import { ConfirmModal } from "../common/ConfirmModal";
 
 export function TaskPanel() {
   const { tasks, loadingTasks, loadTasks, deleteTask, toggleTask, triggerTask, models } = useAppStore();
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);
+  const [deletingTask, setDeletingTask] = useState<Task | null>(null);
 
   useEffect(() => {
     loadTasks();
@@ -44,9 +46,14 @@ export function TaskPanel() {
     }
   };
 
-  const handleDelete = async (task: Task) => {
-    if (!confirm(`确定删除任务「${task.name}」？`)) return;
-    await deleteTask(task.id);
+  const handleDelete = (task: Task) => {
+    setDeletingTask(task);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingTask) return;
+    await deleteTask(deletingTask.id);
+    setDeletingTask(null);
   };
 
   return (
@@ -92,6 +99,17 @@ export function TaskPanel() {
 
       {/* 创建/编辑表单 */}
       {showForm && <TaskForm task={editingTask} onClose={handleCloseForm} />}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        open={!!deletingTask}
+        title="删除任务"
+        message={`确定删除任务「${deletingTask?.name}」？删除后无法恢复。`}
+        confirmText="删除"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setDeletingTask(null)}
+      />
     </div>
   );
 }
