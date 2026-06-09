@@ -6,6 +6,56 @@ import { useState, useRef, useEffect } from "react";
 import { useAppStore } from "../../store";
 import type { DebugEntry, DebugEntryType } from "../../types";
 
+/** JSON 语法高亮组件（轻量级，无外部依赖） */
+function JsonHighlight({ value, depth = 0 }: { value: any; depth?: number }) {
+  if (value === null) return <span className="text-neutral-400">null</span>;
+  if (value === undefined) return <span className="text-neutral-400">undefined</span>;
+  if (typeof value === "boolean") return <span className="text-purple-600">{String(value)}</span>;
+  if (typeof value === "number") return <span className="text-blue-600">{value}</span>;
+  if (typeof value === "string") {
+    // 长字符串截断显示
+    const display = value.length > 300 ? value.slice(0, 300) + "…" : value;
+    return <span className="text-emerald-700">"{display}"</span>;
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-neutral-400">[]</span>;
+    const indent = "  ".repeat(depth + 1);
+    const closingIndent = "  ".repeat(depth);
+    // 大数组只显示前 10 项
+    const items = value.length > 10 ? value.slice(0, 10) : value;
+    return (
+      <>
+        [<span className="text-neutral-400">{value.length > 10 ? ` // ${value.length} items` : ""}</span>{"\n"}
+        {items.map((item, i) => (
+          <span key={i}>{indent}<JsonHighlight value={item} depth={depth + 1} />{i < items.length - 1 ? "," : ""}{"\n"}</span>
+        ))}
+        {closingIndent}]
+      </>
+    );
+  }
+
+  if (typeof value === "object") {
+    const keys = Object.keys(value);
+    if (keys.length === 0) return <span className="text-neutral-400">{'{}'}</span>;
+    const indent = "  ".repeat(depth + 1);
+    const closingIndent = "  ".repeat(depth);
+    // 大对象只显示前 15 个 key
+    const displayKeys = keys.length > 15 ? keys.slice(0, 15) : keys;
+    return (
+      <>
+        {'{'}<span className="text-neutral-400">{keys.length > 15 ? ` // ${keys.length} keys` : ""}</span>{"\n"}
+        {displayKeys.map((key, i) => (
+          <span key={key}>{indent}<span className="text-red-600">"{key}"</span>: <JsonHighlight value={value[key]} depth={depth + 1} />{i < displayKeys.length - 1 ? "," : ""}{"\n"}</span>
+        ))}
+        {closingIndent}{'}'}
+      </>
+    );
+  }
+
+  return <span className="text-neutral-500">{JSON.stringify(value)}</span>;
+}
+
 /** 事件类型 → 图标 + 颜色 */
 const EVENT_STYLE: Record<DebugEntryType, { icon: string; color: string; bg: string }> = {
   system_prompt: { icon: "📝", color: "text-purple-600", bg: "bg-purple-50" },
@@ -36,8 +86,8 @@ function DebugEntryCard({ entry }: { entry: DebugEntry }) {
       </button>
       {expanded && (
         <div className="px-3 pb-3">
-          <pre className="text-[11px] leading-relaxed text-neutral-600 bg-white rounded-lg p-2.5 overflow-x-auto max-h-80 overflow-y-auto border border-neutral-100">
-            {JSON.stringify(entry.data, null, 2)}
+          <pre className="text-[11px] leading-relaxed bg-white rounded-lg p-2.5 overflow-x-auto max-h-80 overflow-y-auto border border-neutral-100">
+            <JsonHighlight value={entry.data} />
           </pre>
         </div>
       )}
@@ -73,14 +123,14 @@ function formatTime(ts: number): string {
 export function DebugPanel() {
   const { debugPanelOpen, debugEntries, toggleDebugPanel, clearDebugEntries } = useAppStore();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [autoScroll, setAutoScroll] = useState(true);
+  const autoScrollRef = useRef(true);
 
-  // 新条目自动滚到底部
+  // 新条目自动滚到底部（仅当用户已在底部时）
   useEffect(() => {
-    if (autoScroll && scrollRef.current) {
+    if (autoScrollRef.current && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [debugEntries.length, autoScroll]);
+  }, [debugEntries.length]);
 
   if (!debugPanelOpen) return null;
 
@@ -118,7 +168,8 @@ export function DebugPanel() {
         onScroll={() => {
           const el = scrollRef.current;
           if (el) {
-            setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 50);
+            // 距底部 50px 以内视为“已到底部”，自动滚动；否则停止
+            autoScrollRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
           }
         }}
       >

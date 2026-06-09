@@ -176,12 +176,27 @@ router.post("/stream", async (req: Request, res: Response) => {
           }
         }
 
-        // Tool 调用日志
+        // Tool 调用日志 + debug 事件
         if (event.type === "tool_execution_start") {
           logger.info("agent", "Tool 调用开始", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId });
+          if (debugCallbacks) {
+            sendEvent("debug_tool_input", {
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              args: event.args,
+            });
+          }
         }
         if (event.type === "tool_execution_end") {
           logger.info("agent", "Tool 调用完成", { sessionId, toolName: event.toolName, toolCallId: event.toolCallId, isError: event.isError });
+          if (debugCallbacks) {
+            sendEvent("debug_tool_output", {
+              toolCallId: event.toolCallId,
+              toolName: event.toolName,
+              result: event.result,
+              isError: event.isError,
+            });
+          }
         }
 
         const sseData = convertToSSE(event);

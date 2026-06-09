@@ -345,19 +345,18 @@ export function SessionList() {
         ) : (
           <div className="grid gap-2 max-w-5xl mx-auto">
             {filteredSessions.map((session) => (
-              <div key={session.id} style={{ contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
-                <SessionItem
-                  session={session}
-                  isActive={session.id === currentSessionId}
-                  selectable={selectMode}
-                  selected={selectedIds.has(session.id)}
-                  models={models}
-                  onSelect={() => handleSelectSession(session.id)}
-                  onDelete={() => deleteSession(session.id)}
-                  onRename={(title) => renameSession(session.id, title)}
-                  onTogglePin={() => togglePin(session.id, !session.pinned)}
-                />
-              </div>
+              <SessionItem
+                key={session.id}
+                session={session}
+                isActive={session.id === currentSessionId}
+                selectable={selectMode}
+                selected={selectedIds.has(session.id)}
+                models={models}
+                onSelect={() => handleSelectSession(session.id)}
+                onDelete={() => deleteSession(session.id)}
+                onRename={(title) => renameSession(session.id, title)}
+                onTogglePin={() => togglePin(session.id, !session.pinned)}
+              />
             ))}
           </div>
         )}

@@ -109,7 +109,7 @@ function PageLoader() {
 
 /** 顶栏 */
 function TopBar() {
-  const { currentView, debugEnabled, toggleDebug, debugPanelOpen, toggleDebugPanel } = useAppStore();
+  const { currentView } = useAppStore();
 
   return (
     <div className="flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-sm border-b border-neutral-200/60">
@@ -118,22 +118,6 @@ function TopBar() {
         <span className="font-semibold text-neutral-800 text-[15px]">Doudou Agent</span>
       </div>
       <div className="flex items-center gap-3">
-        {currentView === "chat" && (
-          <button
-            onClick={() => {
-              toggleDebug();
-              if (!debugEnabled && !debugPanelOpen) toggleDebugPanel();
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
-              debugEnabled
-                ? "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
-                : "bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100"
-            }`}
-            title={debugEnabled ? "关闭 Debug 模式" : "开启 Debug 模式"}
-          >
-            🐛 Debug {debugEnabled ? "ON" : "OFF"}
-          </button>
-        )}
         {currentView === "chat" && <ModelSelector />}
       </div>
     </div>

@@ -59,6 +59,7 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
   createSession: async (title?: string) => {
     const modelId = get().currentModelId;
     const session = await api.createSession(title, modelId);
+    get().clearDebugOnSessionChange();
     set((state: SessionState) => ({
       sessions: [session, ...state.sessions],
       currentSessionId: session.id,
@@ -71,6 +72,8 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
 
   selectSession: async (id: string, pushHistory = true) => {
     const session = get().sessions.find((s: SessionMeta) => s.id === id);
+    // 切换 session 时清空 debug 条目，避免跨 session 混淆
+    get().clearDebugOnSessionChange();
     set({
       currentSessionId: id,
       currentView: "chat" as MainView,

@@ -101,6 +101,10 @@ export function InputBox() {
   const pendingTemplateContent = useAppStore((s) => s.pendingTemplateContent);
   const clearPendingTemplate = useAppStore((s) => s.clearPendingTemplate);
   const setCurrentView = useAppStore((s) => s.setCurrentView);
+  const debugEnabled = useAppStore((s) => s.debugEnabled);
+  const toggleDebug = useAppStore((s) => s.toggleDebug);
+  const debugPanelOpen = useAppStore((s) => s.debugPanelOpen);
+  const toggleDebugPanel = useAppStore((s) => s.toggleDebugPanel);
 
   const currentModel = models.find((m) => m.id === currentModelId);
   const supportsImages = currentModel?.input?.includes("image") ?? false;
@@ -517,6 +521,22 @@ export function InputBox() {
                 className="hidden"
                 onChange={handleFileSelect}
               />
+
+              {/* Debug 开关 */}
+              <button
+                onClick={() => {
+                  toggleDebug();
+                  if (!debugEnabled && !debugPanelOpen) toggleDebugPanel();
+                }}
+                className={`w-8 h-8 flex items-center justify-center rounded-full transition-all text-sm ${
+                  debugEnabled
+                    ? "text-amber-600 bg-amber-50 hover:bg-amber-100"
+                    : "text-neutral-300 hover:text-neutral-500 hover:bg-neutral-50"
+                }`}
+                title={debugEnabled ? "关闭 Debug" : "开启 Debug"}
+              >
+                🐛
+              </button>
 
               {/* token 预估 */}
               {input.trim() ? (

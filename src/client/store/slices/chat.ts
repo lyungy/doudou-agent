@@ -39,6 +39,7 @@ export interface ChatActions {
   toggleDebugPanel: () => void;
   addDebugEntry: (entry: Omit<DebugEntry, "id" | "timestamp">) => void;
   clearDebugEntries: () => void;
+  clearDebugOnSessionChange: () => void;
   // 内部方法
   _resumeStream: (sessionId: string) => Promise<void>;
   _setStreaming: (v: boolean) => void;
@@ -53,6 +54,9 @@ export interface ChatActions {
 export type ChatSlice = ChatState & ChatActions;
 
 let abortController: AbortController | null = null;
+
+/** Debug 条目最大数量，超出时丢弃最早的条目 */
+const MAX_DEBUG_ENTRIES = 200;
 
 export const createChatSlice = (set: any, get: any): ChatSlice => ({
   messages: [],
@@ -105,9 +109,17 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
   // Debug actions
   toggleDebug: () => set((state: ChatState) => ({ debugEnabled: !state.debugEnabled })),
   toggleDebugPanel: () => set((state: ChatState) => ({ debugPanelOpen: !state.debugPanelOpen })),
-  addDebugEntry: (entry) => set((state: ChatState) => ({
-    debugEntries: [...state.debugEntries, { ...entry, id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() }],
-  })),
+  /** 切换 session 时清空 debug 条目，避免跨 session 混淆 */
+  clearDebugOnSessionChange: () => set({ debugEntries: [] }),
+  addDebugEntry: (entry) => set((state: ChatState) => {
+    const newEntry = { ...entry, id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() };
+    const entries = [...state.debugEntries, newEntry];
+    // 超出上限时丢弃最早的条目，防止长时间运行内存膨胀
+    if (entries.length > MAX_DEBUG_ENTRIES) {
+      entries.splice(0, entries.length - MAX_DEBUG_ENTRIES);
+    }
+    return { debugEntries: entries };
+  }),
   clearDebugEntries: () => set({ debugEntries: [] }),
 
   sendMessage: async (content: string, images?: Array<{ data: string; mimeType: string }>) => {

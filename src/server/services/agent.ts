@@ -338,27 +338,42 @@ export async function getOrCreateAgent(
     // 请求 payload 日志 + debug 事件
     onPayload: (params: any) => {
       getLogger().info("llm", `请求 payload model=${params.model}, messages=${params.messages?.length || 0} 条`, { sessionId });
-      // Debug: 捕获完整 LLM 请求 payload
+      // Debug: 捕获 LLM 请求 payload（精简版，不含完整 schema）
       if (debug) {
         debug.onDebugEvent("debug_payload", {
           model: params.model,
           messageCount: params.messages?.length || 0,
           messages: params.messages,
           toolCount: params.tools?.length || 0,
-          tools: params.tools,
+          tools: params.tools?.map((t: any) => ({ name: t.name, description: t.description })),
         });
       }
       return params;
     },
-    // Debug: 捕获 LLM 响应
-    onResponse: debug
-      ? (response: any) => {
-          debug.onDebugEvent("debug_response", {
-            status: response.status,
-            headers: response.headers,
-          });
-        }
-      : undefined,
+    // LLM 响应日志（始终注册）
+    onResponse: (response: any) => {
+      getLogger().debug("llm", `LLM 响应 status=${response.status}`, { sessionId });
+      // Debug: 捕获 LLM 响应
+      if (debug) {
+        debug.onDebugEvent("debug_response", {
+          status: response.status,
+          headers: response.headers,
+        });
+      }
+    },
+    // Debug: 捕获消息转换结果
+    convertToLlm: (messages: any[]) => {
+      // 默认转换逻辑（pi-agent-core 内部会处理）
+      const converted = messages; // 实际转换由框架完成，这里只是钩子
+      if (debug) {
+        debug.onDebugEvent("debug_messages", {
+          inputCount: messages.length,
+          outputCount: converted.length,
+          messages: converted,
+        });
+      }
+      return converted;
+    },
   });
 
   agents.set(sessionId, agent);
