@@ -15,6 +15,7 @@ const InputBox = lazy(() => import("./components/Chat/InputBox").then((m) => ({ 
 const PromptTemplates = lazy(() => import("./components/Chat/PromptTemplates").then((m) => ({ default: m.PromptTemplates })));
 const LLMStatusBar = lazy(() => import("./components/Chat/LLMStatusBar").then((m) => ({ default: m.LLMStatusBar })));
 const ContextUsageBar = lazy(() => import("./components/Chat/ContextUsageBar").then((m) => ({ default: m.ContextUsageBar })));
+const DebugPanel = lazy(() => import("./components/Chat/DebugPanel").then((m) => ({ default: m.DebugPanel })));
 const ModelSelector = lazy(() => import("./components/Config/ModelSelector").then((m) => ({ default: m.ModelSelector })));
 const SystemPromptEditor = lazy(() => import("./components/Config/SystemPromptEditor").then((m) => ({ default: m.SystemPromptEditor })));
 const TemplateManager = lazy(() => import("./components/Config/TemplateManager").then((m) => ({ default: m.TemplateManager })));
@@ -54,7 +55,7 @@ export default function App() {
       <ToastContainer />
       <Navigation />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         <Suspense fallback={<PageLoader />}>
           {currentView === "home" && (
             <>
@@ -64,10 +65,7 @@ export default function App() {
           )}
 
           {currentView === "chat" && (
-            <>
-              <TopBar />
-              {currentSessionId ? <ChatView /> : <EmptyChatHint />}
-            </>
+            <ChatWithDebug />
           )}
 
           {currentView === "session" && <SessionList />}
@@ -111,7 +109,7 @@ function PageLoader() {
 
 /** 顶栏 */
 function TopBar() {
-  const { currentView } = useAppStore();
+  const { currentView, debugEnabled, toggleDebug, debugPanelOpen, toggleDebugPanel } = useAppStore();
 
   return (
     <div className="flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-sm border-b border-neutral-200/60">
@@ -119,7 +117,25 @@ function TopBar() {
         <span className="text-lg">🐕</span>
         <span className="font-semibold text-neutral-800 text-[15px]">Doudou Agent</span>
       </div>
-      {currentView === "chat" && <ModelSelector />}
+      <div className="flex items-center gap-3">
+        {currentView === "chat" && (
+          <button
+            onClick={() => {
+              toggleDebug();
+              if (!debugEnabled && !debugPanelOpen) toggleDebugPanel();
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+              debugEnabled
+                ? "bg-amber-50 border-amber-300 text-amber-700 shadow-sm"
+                : "bg-neutral-50 border-neutral-200 text-neutral-500 hover:bg-neutral-100"
+            }`}
+            title={debugEnabled ? "关闭 Debug 模式" : "开启 Debug 模式"}
+          >
+            🐛 Debug {debugEnabled ? "ON" : "OFF"}
+          </button>
+        )}
+        {currentView === "chat" && <ModelSelector />}
+      </div>
     </div>
   );
 }
@@ -170,6 +186,21 @@ function ChatView() {
       <ContextUsageBar />
       <InputBox />
     </>
+  );
+}
+
+/** Chat + Debug 分栏布局 */
+function ChatWithDebug() {
+  const { currentSessionId, debugPanelOpen } = useAppStore();
+
+  return (
+    <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
+      <TopBar />
+      <div className="flex-1 flex flex-col min-w-0 min-h-0" style={debugPanelOpen ? { marginRight: 420 } : undefined}>
+        {currentSessionId ? <ChatView /> : <EmptyChatHint />}
+      </div>
+      <DebugPanel />
+    </div>
   );
 }
 

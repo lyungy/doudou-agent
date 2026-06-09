@@ -105,6 +105,7 @@ export interface ChatStreamCallbacks {
   onLLMStatus: (data: { status: string; requestId: string; ttft?: number; duration?: number; inputTokens?: number; outputTokens?: number; error?: string }) => void;
   onDone: () => void;
   onError: (error: string) => void;
+  onDebugEvent?: (type: string, data: any) => void;
 }
 
 /**
@@ -122,7 +123,7 @@ export async function streamChat(
   const response = await fetch(`${BASE}/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel, images }),
+    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel, images, debug: !!callbacks.onDebugEvent }),
     signal,
   });
 
@@ -183,6 +184,12 @@ export async function streamChat(
 }
 
 function handleSSEEvent(type: string, data: any, callbacks: ChatStreamCallbacks) {
+  // Debug 事件：统一处理
+  if (type.startsWith("debug_")) {
+    callbacks.onDebugEvent?.(type, data);
+    return;
+  }
+
   switch (type) {
     case "text_delta":
       callbacks.onTextDelta(data.delta);

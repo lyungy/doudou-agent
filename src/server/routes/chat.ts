@@ -17,7 +17,7 @@ const router = Router();
  * POST /api/chat/stream — SSE 流式对话
  */
 router.post("/stream", async (req: Request, res: Response) => {
-  const { sessionId, message, modelId, thinkingLevel, images } = req.body;
+  const { sessionId, message, modelId, thinkingLevel, images, debug: debugEnabled } = req.body;
   const logger = getLogger();
   const tracker = getLLMTracker();
 
@@ -108,7 +108,14 @@ router.post("/stream", async (req: Request, res: Response) => {
     await withSessionLock(sessionId, async () => {
       const model = getModelById(modelId || sessionMeta.modelId || undefined);
       logger.debug("sse", `解析模型: ${model.id} (请求modelId=${modelId}, sessionModelId=${sessionMeta.modelId})`, { sessionId });
-      const { agent, historyCount } = await getOrCreateAgent(sessionId, model);
+      // Debug 回调：将 debug 事件通过 SSE 推送给前端
+      const debugCallbacks = debugEnabled ? {
+        onDebugEvent: (type: string, data: any) => {
+          sendEvent(type, data);
+        }
+      } : undefined;
+
+      const { agent, historyCount } = await getOrCreateAgent(sessionId, model, undefined, debugCallbacks);
       agentInstance = agent;
       logger.info("sse", `Agent 实际模型: ${agent.state.model?.id}`, { sessionId });
 

@@ -50,12 +50,11 @@ export function SessionList() {
     loadSessions();
   }, [loadSessions]);
 
-  // 内容搜索模式下，搜索词变化时防抖重新加载
+  // 搜索词变化时防抖重新加载（标题搜索 + 内容搜索都生效）
   useEffect(() => {
-    if (!searchContent || !sessionSearch.trim()) return;
-    const timer = setTimeout(() => loadSessions(), 300);
+    const timer = setTimeout(() => loadSessions(), sessionSearch.trim() ? 300 : 0);
     return () => clearTimeout(timer);
-  }, [searchContent, sessionSearch]);
+  }, [sessionSearch, searchContent]);
 
   // 筛选 + 排序逻辑
   const filteredSessions = useMemo(() => {

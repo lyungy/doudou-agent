@@ -2,7 +2,7 @@
  * 对话状态 slice
  * 管理消息列表、SSE 流式对话、LLM 状态、消息搜索
  */
-import type { ChatMessage, ToolCallInfo, LLMRequestStatus, LLMStatusData, CumulativeTokens } from "../../types";
+import type { ChatMessage, ToolCallInfo, LLMRequestStatus, LLMStatusData, CumulativeTokens, DebugEntry } from "../../types";
 import * as api from "../../lib/client";
 import { convertToChatMessages } from "./chat-helpers";
 
@@ -18,6 +18,10 @@ export interface ChatState {
   // 消息搜索
   messageSearch: string;
   messageSearchOpen: boolean;
+  // Debug 模式
+  debugEnabled: boolean;
+  debugEntries: DebugEntry[];
+  debugPanelOpen: boolean;
 }
 
 export interface ChatActions {
@@ -30,6 +34,11 @@ export interface ChatActions {
   refreshCumulativeTokens: (sessionId: string) => Promise<void>;
   setMessageSearch: (q: string) => void;
   setMessageSearchOpen: (open: boolean) => void;
+  // Debug
+  toggleDebug: () => void;
+  toggleDebugPanel: () => void;
+  addDebugEntry: (entry: Omit<DebugEntry, "id" | "timestamp">) => void;
+  clearDebugEntries: () => void;
   // 内部方法
   _resumeStream: (sessionId: string) => Promise<void>;
   _setStreaming: (v: boolean) => void;
@@ -56,6 +65,10 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
   cumulativeTokensBySession: {},
   messageSearch: "",
   messageSearchOpen: false,
+  // Debug
+  debugEnabled: false,
+  debugEntries: [],
+  debugPanelOpen: false,
 
   getCurrentLLMStatus: () => {
     const { currentSessionId, llmStatusBySession } = get();
@@ -88,6 +101,14 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
 
   setMessageSearch: (q) => set({ messageSearch: q }),
   setMessageSearchOpen: (open) => set({ messageSearchOpen: open, messageSearch: open ? get().messageSearch : "" }),
+
+  // Debug actions
+  toggleDebug: () => set((state: ChatState) => ({ debugEnabled: !state.debugEnabled })),
+  toggleDebugPanel: () => set((state: ChatState) => ({ debugPanelOpen: !state.debugPanelOpen })),
+  addDebugEntry: (entry) => set((state: ChatState) => ({
+    debugEntries: [...state.debugEntries, { ...entry, id: `dbg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, timestamp: Date.now() }],
+  })),
+  clearDebugEntries: () => set({ debugEntries: [] }),
 
   sendMessage: async (content: string, images?: Array<{ data: string; mimeType: string }>) => {
     const { currentSessionId } = get();
@@ -162,6 +183,9 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
             get().refreshCumulativeTokens(sessionId);
           }
         },
+        onDebugEvent: get().debugEnabled
+          ? (type, data) => get().addDebugEntry({ type: type.replace("debug_", "") as any, data })
+          : undefined,
         onDone: () => {
           get()._commitAssistantMessage();
           set({ isStreaming: false, streamingMessageId: null });

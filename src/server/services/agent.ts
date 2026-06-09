@@ -49,6 +49,11 @@ function loadSystemPrompt(): string {
   return DEFAULT_SYSTEM_PROMPT;
 }
 
+/** Debug 事件回调类型 */
+export interface DebugCallbacks {
+  onDebugEvent: (type: string, data: any) => void;
+}
+
 /** 活跃的 Agent 实例映射（sessionId → Agent） */
 const agents = new Map<string, Agent>();
 
@@ -262,7 +267,8 @@ export async function getAgent(sessionId: string, modelId?: string): Promise<Age
 export async function getOrCreateAgent(
   sessionId: string,
   model: Model<any>,
-  systemPrompt?: string
+  systemPrompt?: string,
+  debug?: DebugCallbacks
 ): Promise<{ agent: Agent; historyCount: number }> {
   const existing = agents.get(sessionId);
   if (existing) {
@@ -308,6 +314,15 @@ export async function getOrCreateAgent(
     thinkingLevel = "off";
   }
 
+  // Debug: 捕获 system prompt
+  if (debug) {
+    const sp = systemPrompt || loadSystemPrompt();
+    debug.onDebugEvent("debug_system_prompt", {
+      systemPrompt: sp,
+      length: sp.length,
+    });
+  }
+
   let agent: Agent;
   agent = new Agent({
     initialState: {
@@ -320,11 +335,30 @@ export async function getOrCreateAgent(
     // 动态获取 apiKey：模型切换时 key 也要跟着变
     getApiKey: (): string => getApiKeyByModelId(agent.state.model?.id),
     toolExecution: "parallel",
-    // 请求 payload 日志
+    // 请求 payload 日志 + debug 事件
     onPayload: (params: any) => {
       getLogger().info("llm", `请求 payload model=${params.model}, messages=${params.messages?.length || 0} 条`, { sessionId });
+      // Debug: 捕获完整 LLM 请求 payload
+      if (debug) {
+        debug.onDebugEvent("debug_payload", {
+          model: params.model,
+          messageCount: params.messages?.length || 0,
+          messages: params.messages,
+          toolCount: params.tools?.length || 0,
+          tools: params.tools,
+        });
+      }
       return params;
     },
+    // Debug: 捕获 LLM 响应
+    onResponse: debug
+      ? (response: any) => {
+          debug.onDebugEvent("debug_response", {
+            status: response.status,
+            headers: response.headers,
+          });
+        }
+      : undefined,
   });
 
   agents.set(sessionId, agent);

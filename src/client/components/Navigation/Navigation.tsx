@@ -30,7 +30,7 @@ export function Navigation() {
     <div
       className={`${
         collapsed ? "w-[68px]" : "w-60"
-      } bg-white border-r border-neutral-200/80 flex flex-col h-full transition-all duration-200 select-none`}
+      } shrink-0 bg-white border-r border-neutral-200/80 flex flex-col h-full transition-all duration-200 select-none`}
     >
       {/* 品牌区 */}
       <div className={`px-5 pt-6 pb-5 ${collapsed ? "px-3 pt-4 pb-3" : ""}`}>

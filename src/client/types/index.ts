@@ -161,6 +161,17 @@ export interface LLMStatusData {
   error?: string;
 }
 
+/** Debug 条目类型 */
+export type DebugEntryType = "system_prompt" | "payload" | "response" | "messages" | "tool_input" | "tool_output";
+
+/** Debug 条目 */
+export interface DebugEntry {
+  id: string;
+  type: DebugEntryType;
+  timestamp: number;
+  data: any;
+}
+
 /** SSE 事件类型 */
 export type SSEEventType =
   | "text_delta"
