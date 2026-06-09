@@ -58,13 +58,13 @@ export function Dashboard() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-neutral-50 p-6">
-      <div className="max-w-6xl mx-auto space-y-5">
+    <div className="flex-1 overflow-y-auto bg-neutral-50/50 p-8">
+      <div className="max-w-6xl mx-auto space-y-6">
         {/* 标题栏 */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-neutral-800">📊 数据看板</h1>
-            <p className="text-sm text-neutral-500 mt-0.5">
+            <h1 className="text-2xl font-bold text-neutral-900">📊 数据看板</h1>
+            <p className="text-sm text-neutral-500 mt-1">
               系统运行概览 · 近 {days} 天
             </p>
           </div>

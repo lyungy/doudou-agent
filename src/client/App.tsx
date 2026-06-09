@@ -1,5 +1,5 @@
 /**
- * 主界面布局
+ * 主界面布局（大气风格）
  * 左侧导航栏 + 右侧内容区（按 currentView 联动）
  * 路由级 React.lazy 代码分割
  */
@@ -8,11 +8,8 @@ import { useState, useEffect, lazy, Suspense } from "react";
 import { Navigation } from "./components/Navigation/Navigation";
 import { ToastContainer } from "./components/common/Toast";
 
-// 懒加载各页面组件（按视图拆分 chunk）
-const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));  
-// Note: HomePage is a named export, need wrapper
-
-// 直接用 lazy 的组件
+// 懒加载各页面组件
+const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));
 const MessageList = lazy(() => import("./components/Chat/MessageList").then((m) => ({ default: m.MessageList })));
 const InputBox = lazy(() => import("./components/Chat/InputBox").then((m) => ({ default: m.InputBox })));
 const PromptTemplates = lazy(() => import("./components/Chat/PromptTemplates").then((m) => ({ default: m.PromptTemplates })));
@@ -30,24 +27,20 @@ const Dashboard = lazy(() => import("./components/Dashboard/index").then((m) => 
 export default function App() {
   const { currentView, currentSessionId, logSubView, initApp, selectSession, sessions } = useAppStore();
 
-  // 初始化：加载模型+会话+从 URL 恢复
   useEffect(() => {
     initApp();
   }, [initApp]);
 
-  // 浏览器前进/后退支持
   useEffect(() => {
     const handlePopState = (e: PopStateEvent) => {
       const sessionId = e.state?.sessionId || null;
       if (sessionId) {
-        // 验证会话是否有效
         const valid = sessions.some((s) => s.id === sessionId);
         if (valid) {
           selectSession(sessionId, false);
           return;
         }
       }
-      // 无效或无 session → 回到首页
       useAppStore.getState().setCurrentView("home");
       useAppStore.setState({ currentSessionId: null, messages: [] });
     };
@@ -57,17 +50,12 @@ export default function App() {
   }, [selectSession, sessions]);
 
   return (
-    <div className="flex h-screen bg-neutral-50">
-      {/* 全局 Toast 通知 */}
+    <div className="flex h-screen bg-neutral-50/50">
       <ToastContainer />
-
-      {/* 左侧导航栏 */}
       <Navigation />
 
-      {/* 右侧内容区 */}
       <div className="flex-1 flex flex-col min-w-0">
         <Suspense fallback={<PageLoader />}>
-          {/* 首页/对话视图需要顶栏 */}
           {currentView === "home" && (
             <>
               <TopBar />
@@ -78,11 +66,7 @@ export default function App() {
           {currentView === "chat" && (
             <>
               <TopBar />
-              {currentSessionId ? (
-                <ChatView />
-              ) : (
-                <EmptyChatHint />
-              )}
+              {currentSessionId ? <ChatView /> : <EmptyChatHint />}
             </>
           )}
 
@@ -109,48 +93,50 @@ export default function App() {
   );
 }
 
-/** 页面加载中 fallback */
 function PageLoader() {
   return (
-    <div className="flex-1 flex items-center justify-center bg-neutral-50">
-      <div className="flex items-center gap-3">
-        <span className="w-5 h-5 border-2 border-neutral-300 border-t-blue-500 rounded-full animate-spin" />
-        <span className="text-sm text-neutral-400">加载中...</span>
+    <div className="flex-1 flex items-center justify-center">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-xl shadow-lg shadow-blue-500/20">
+          🐕
+        </div>
+        <div className="flex items-center gap-2.5">
+          <span className="w-4 h-4 border-2 border-neutral-200 border-t-blue-500 rounded-full animate-spin" />
+          <span className="text-sm text-neutral-400">加载中...</span>
+        </div>
       </div>
     </div>
   );
 }
 
-/** 顶栏 — 根据视图决定是否显示模型选择器 */
+/** 顶栏 */
 function TopBar() {
   const { currentView } = useAppStore();
 
   return (
-    <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-neutral-200">
-      <div className="flex items-center gap-2">
-        <span className="text-xl">🐕</span>
-        <span className="font-semibold text-neutral-800">Doudou Agent</span>
+    <div className="flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-sm border-b border-neutral-200/60">
+      <div className="flex items-center gap-3">
+        <span className="text-lg">🐕</span>
+        <span className="font-semibold text-neutral-800 text-[15px]">Doudou Agent</span>
       </div>
-
-      {/* 仅对话视图显示模型选择器 */}
       {currentView === "chat" && <ModelSelector />}
     </div>
   );
 }
 
-/** 会话视图 — 未选中会话时的提示 */
 function EmptyChatHint() {
   return (
-    <div className="flex-1 flex items-center justify-center bg-neutral-50">
+    <div className="flex-1 flex items-center justify-center">
       <div className="text-center">
-        <div className="text-4xl mb-3">💬</div>
-        <p className="text-neutral-400 text-sm">请在左侧选择一个会话，或新建对话</p>
+        <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-3xl shadow-lg shadow-blue-500/20">
+          💬
+        </div>
+        <p className="text-neutral-500 text-[15px]">请在左侧选择一个会话，或新建对话</p>
       </div>
     </div>
   );
 }
 
-/** 对话视图 — 有 session 时：加载中显示骨架屏，空消息显示模板卡片，否则显示正常对话 */
 function ChatView() {
   const { messages, loadingSession } = useAppStore();
 
@@ -158,8 +144,8 @@ function ChatView() {
     return (
       <>
         <div className="flex-1 flex items-center justify-center">
-          <div className="flex items-center gap-2 text-neutral-400">
-            <span className="w-4 h-4 border-2 border-neutral-300 border-t-blue-500 rounded-full animate-spin" />
+          <div className="flex items-center gap-3 text-neutral-400">
+            <span className="w-4 h-4 border-2 border-neutral-200 border-t-blue-500 rounded-full animate-spin" />
             <span className="text-sm">加载消息中...</span>
           </div>
         </div>
@@ -187,15 +173,13 @@ function ChatView() {
   );
 }
 
-/** 配置视图 — tab 切换：配置 / 模板 / 系统提示词 */
 function ConfigView() {
   const [tab, setTab] = useState<"config" | "templates" | "prompt">("templates");
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Tab 栏 */}
-      <div className="px-6 pt-4 bg-neutral-50">
-        <div className="flex gap-1 border-b border-neutral-200">
+      <div className="px-8 pt-6 bg-neutral-50/50">
+        <div className="flex gap-1 border-b border-neutral-200/80">
           {([
             { key: "templates" as const, label: "📋 模板" },
             { key: "prompt" as const, label: "📄 系统提示词" },
@@ -203,7 +187,7 @@ function ConfigView() {
             <button
               key={key}
               onClick={() => setTab(key)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              className={`px-5 py-3 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 tab === key
                   ? "border-blue-500 text-blue-600"
                   : "border-transparent text-neutral-500 hover:text-neutral-700"
@@ -215,7 +199,6 @@ function ConfigView() {
         </div>
       </div>
 
-      {/* Tab 内容 */}
       {tab === "templates" && <TemplateManager />}
       {tab === "prompt" && <SystemPromptEditor />}
     </div>

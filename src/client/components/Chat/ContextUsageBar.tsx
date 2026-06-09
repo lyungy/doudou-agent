@@ -46,7 +46,7 @@ export function ContextUsageBar() {
   const colors = getUsageColor(percentage);
 
   return (
-    <div className="flex items-center justify-center gap-2 px-4 py-1 text-xs">
+    <div className="flex items-center justify-center gap-2.5 px-6 py-1.5 text-xs">
       <span className="text-neutral-400 shrink-0">上下文</span>
 
       {/* 进度条 */}

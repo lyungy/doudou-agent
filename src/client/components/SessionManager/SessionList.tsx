@@ -195,7 +195,7 @@ export function SessionList() {
   return (
     <div className="flex-1 flex flex-col bg-neutral-50 overflow-hidden">
       {/* 顶栏 */}
-      <div className="px-6 py-4 bg-white border-b border-neutral-200 overflow-hidden">
+      <div className="px-8 py-5 bg-white border-b border-neutral-200/60 overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-lg font-semibold text-neutral-800">会话管理</h1>
           <div className="flex items-center gap-2">
@@ -331,9 +331,9 @@ export function SessionList() {
       </div>
 
       {/* 列表区 */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-8 py-5">
         {loadingSessions ? (
-          <div className="px-6 py-4">
+          <div className="px-8 py-5">
             <SessionListSkeleton count={6} />
           </div>
         ) : filteredSessions.length === 0 ? (

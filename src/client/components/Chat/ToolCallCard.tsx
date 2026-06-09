@@ -51,7 +51,7 @@ export function ToolCallCard({ toolCall }: Props) {
       : "";
 
   return (
-    <div className={`bg-neutral-50 border border-neutral-200 rounded-lg text-xs overflow-hidden border-l-[3px] ${borderColor}`}>
+    <div className={`bg-neutral-100/60 border border-neutral-200/60 rounded-xl text-xs overflow-hidden border-l-[3px] ${borderColor}`}>
       <button
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2 hover:bg-neutral-100 transition-colors"

@@ -16,7 +16,7 @@ export function LLMStatusBar() {
   const { status: llmStatus, ttft: llmTtft, duration: llmDuration, inputTokens: llmInputTokens, outputTokens: llmOutputTokens, error: llmError } = status;
 
   return (
-    <div className="flex items-center gap-3 px-4 py-1.5 text-xs border-t border-neutral-100 bg-neutral-50">
+    <div className="flex items-center gap-3 px-6 py-2 text-xs border-t border-neutral-100 bg-neutral-50/50">
       {/* 状态标签 */}
       <StatusBadge status={llmStatus} />
 

@@ -400,8 +400,8 @@ export function InputBox() {
   const tokenEstimate = useMemo(() => estimateTokens(input), [input]);
 
   return (
-    <div className="px-4 pb-4 pt-2">
-      <div className="max-w-4xl mx-auto relative">
+    <div className="px-6 pb-6 pt-3">
+      <div className="max-w-5xl mx-auto relative">
         {/* / 命令浮层 */}
         {showSlashMenu && filteredCommands.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-xl shadow-xl border border-neutral-200 py-2 max-h-64 overflow-y-auto z-50">
@@ -433,7 +433,7 @@ export function InputBox() {
         )}
 
         <div
-          className="bg-white rounded-2xl shadow-lg border border-neutral-200 overflow-hidden transition-shadow hover:shadow-xl focus-within:shadow-xl focus-within:border-blue-300"
+          className="bg-white rounded-2xl shadow-md border border-neutral-200/60 overflow-hidden transition-all hover:shadow-lg focus-within:shadow-lg focus-within:border-blue-300/60"
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragEnter={handleDragEnter}
@@ -484,7 +484,7 @@ export function InputBox() {
                 ? "添加描述... (可选)"
                 : "输入消息... (/ 打开命令，↑ 历史)"
             }
-            className="w-full resize-none px-4 py-3.5 text-[14px] text-neutral-800 placeholder-neutral-400 focus:outline-none bg-transparent leading-relaxed"
+            className="w-full resize-none px-5 py-4 text-[15px] text-neutral-800 placeholder-neutral-400 focus:outline-none bg-transparent leading-7"
             rows={1}
             disabled={isStreaming}
           />

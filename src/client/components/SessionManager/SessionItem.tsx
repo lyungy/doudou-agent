@@ -117,12 +117,12 @@ export function SessionItem({ session, isActive, selectable, selected, models, o
   return (
     <>
       <div
-        className={`group relative flex items-center gap-4 px-4 py-3.5 rounded-xl cursor-pointer transition-all duration-150 border ${
+        className={`group relative flex items-center gap-5 px-5 py-4 rounded-2xl cursor-pointer transition-all duration-150 ${
           selected
-            ? "border-blue-500/50 bg-blue-500/5"
+            ? "bg-blue-50/80 ring-2 ring-blue-500/20"
             : isActive
-              ? "border-neutral-300 bg-white shadow-sm"
-              : "border-neutral-200 bg-white hover:border-neutral-300 hover:shadow-sm"
+              ? "bg-white shadow-md border border-neutral-200/60"
+              : "bg-white border border-neutral-200/60 hover:shadow-md hover:border-neutral-300/60"
         }`}
         onClick={handleClick}
       >

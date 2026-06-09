@@ -79,7 +79,7 @@ export function MarkdownRenderer({ content }: Props) {
         code: CodeBlock,
         // 表格样式
         table: ({ children }) => (
-          <div className="overflow-x-auto my-3">
+          <div className="overflow-x-auto my-4">
             <table className="min-w-full border-collapse text-sm">{children}</table>
           </div>
         ),
@@ -87,10 +87,10 @@ export function MarkdownRenderer({ content }: Props) {
           <thead className="bg-neutral-50 border-b border-neutral-200">{children}</thead>
         ),
         th: ({ children }) => (
-          <th className="px-3 py-2 text-left font-semibold text-neutral-700">{children}</th>
+          <th className="px-4 py-2.5 text-left font-semibold text-neutral-700">{children}</th>
         ),
         td: ({ children }) => (
-          <td className="px-3 py-2 border-b border-neutral-100">{children}</td>
+          <td className="px-4 py-2.5 border-b border-neutral-100">{children}</td>
         ),
         // 链接样式
         a: ({ href, children }) => (
@@ -115,17 +115,17 @@ export function MarkdownRenderer({ content }: Props) {
         ),
         // 引用块
         blockquote: ({ children }) => (
-          <blockquote className="border-l-3 border-blue-400 pl-3 py-1 my-2 bg-blue-50 text-neutral-600 text-sm">
+          <blockquote className="border-l-[3px] border-blue-400 pl-4 py-2 my-3 bg-blue-50/50 text-neutral-600 text-sm rounded-r-lg">
             {children}
           </blockquote>
         ),
         // 列表
-        ul: ({ children }) => <ul className="list-disc pl-5 my-2 space-y-1">{children}</ul>,
-        ol: ({ children }) => <ol className="list-decimal pl-5 my-2 space-y-1">{children}</ol>,
+        ul: ({ children }) => <ul className="list-disc pl-6 my-3 space-y-1.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-6 my-3 space-y-1.5">{children}</ol>,
         // 分割线
         hr: () => <hr className="my-4 border-neutral-200" />,
         // 段落
-        p: ({ children }) => <p className="my-1.5 leading-relaxed">{children}</p>,
+        p: ({ children }) => <p className="my-2 leading-7">{children}</p>,
       }}
     >
       {content}
