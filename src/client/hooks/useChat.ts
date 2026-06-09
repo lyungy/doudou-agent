@@ -11,10 +11,15 @@ export function useChat() {
     currentSessionId,
     sendMessage,
     regenerateMessage,
+    editAndResend,
     abortChat,
     currentText,
     currentThinking,
     currentToolCalls,
+    messageSearch,
+    messageSearchOpen,
+    setMessageSearch,
+    setMessageSearchOpen,
   } = useAppStore();
 
   const send = useCallback(
@@ -30,6 +35,14 @@ export function useChat() {
     await regenerateMessage();
   }, [isStreaming, regenerateMessage]);
 
+  const editMessage = useCallback(
+    async (messageId: string, newContent: string) => {
+      if (isStreaming) return;
+      await editAndResend(messageId, newContent);
+    },
+    [isStreaming, editAndResend]
+  );
+
   const abort = useCallback(() => {
     abortChat();
   }, [abortChat]);
@@ -40,10 +53,15 @@ export function useChat() {
     currentSessionId,
     send,
     regenerate,
+    editMessage,
     abort,
     // 流式渲染用
     streamingText: currentText,
     streamingThinking: currentThinking,
     streamingToolCalls: currentToolCalls,
+    messageSearch,
+    messageSearchOpen,
+    setMessageSearch,
+    setMessageSearchOpen,
   };
 }

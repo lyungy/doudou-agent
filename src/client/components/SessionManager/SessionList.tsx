@@ -6,6 +6,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAppStore } from "../../store";
 import { SessionItem } from "./SessionItem";
 import { ConfirmModal } from "../common/ConfirmModal";
+import { SessionListSkeleton } from "../common/Skeleton";
 
 type TimeFilter = "all" | "today" | "week" | "month";
 type SortKey = "updated" | "created" | "messages";
@@ -34,6 +35,7 @@ export function SessionList() {
     setSearchContent,
     sessionFilter,
     setSessionFilter,
+    addToast,
   } = useAppStore();
 
   // 批量选择模式
@@ -116,9 +118,62 @@ export function SessionList() {
     }
   };
 
+  /** 按条件选择：7天前的会话 */
+  const selectOld = () => {
+    const cutoff = Date.now() - 7 * 86400000;
+    const oldIds = filteredSessions
+      .filter((s) => new Date(s.updatedAt).getTime() < cutoff)
+      .map((s) => s.id);
+    setSelectedIds(new Set(oldIds));
+    if (oldIds.length > 0) setSelectMode(true);
+    addToast("info", `已选择 ${oldIds.length} 个 7 天前的会话`);
+  };
+
+  /** 按条件选择：空会话（0条消息） */
+  const selectEmpty = () => {
+    const emptyIds = filteredSessions
+      .filter((s) => s.messageCount === 0)
+      .map((s) => s.id);
+    setSelectedIds(new Set(emptyIds));
+    if (emptyIds.length > 0) setSelectMode(true);
+    addToast("info", `已选择 ${emptyIds.length} 个空会话`);
+  };
+
+  /** 导出选中的会话为 JSON */
+  const handleExport = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      const exportData: any[] = [];
+      for (const id of selectedIds) {
+        const session = sessions.find((s) => s.id === id);
+        if (!session) continue;
+        // 获取消息（如果有这个 API）
+        exportData.push({
+          id: session.id,
+          title: session.title,
+          modelId: session.modelId,
+          messageCount: session.messageCount,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        });
+      }
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `doudou-sessions-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      addToast("success", `已导出 ${exportData.length} 个会话`);
+    } catch (err: any) {
+      addToast("error", `导出失败: ${err.message}`);
+    }
+  };
+
   const handleBatchDelete = async () => {
     if (selectedIds.size === 0) return;
     await deleteSessions(Array.from(selectedIds));
+    addToast("success", `已删除 ${selectedIds.size} 个会话`);
     setSelectMode(false);
     setSelectedIds(new Set());
     setShowBatchConfirm(false);
@@ -159,6 +214,14 @@ export function SessionList() {
                   {selectedIds.size === filteredSessions.length ? "取消全选" : "全选"}
                 </button>
                 <button
+                  onClick={handleExport}
+                  disabled={selectedIds.size === 0}
+                  className="px-3 py-1.5 text-sm text-emerald-600 hover:text-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="导出选中会话为 JSON"
+                >
+                  📤 导出 ({selectedIds.size})
+                </button>
+                <button
                   onClick={() => setShowBatchConfirm(true)}
                   disabled={selectedIds.size === 0}
                   className="px-3 py-1.5 text-sm text-red-600 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -167,13 +230,29 @@ export function SessionList() {
                 </button>
               </>
             ) : (
-              <button
-                onClick={() => setSelectMode(true)}
-                disabled={sessions.length === 0}
-                className="px-3 py-1.5 text-sm text-neutral-500 hover:text-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-              >
-                批量管理
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={selectOld}
+                  className="px-2 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors"
+                  title="选择 7 天前的会话"
+                >
+                  📅 选旧会话
+                </button>
+                <button
+                  onClick={selectEmpty}
+                  className="px-2 py-1.5 text-xs text-neutral-500 hover:text-neutral-700 hover:bg-neutral-100 rounded-md transition-colors"
+                  title="选择空会话"
+                >
+                  📭 选空会话
+                </button>
+                <button
+                  onClick={() => setSelectMode(true)}
+                  disabled={sessions.length === 0}
+                  className="px-3 py-1.5 text-sm text-neutral-500 hover:text-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  批量管理
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -254,8 +333,8 @@ export function SessionList() {
       {/* 列表区 */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4">
         {loadingSessions ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="text-neutral-400 text-sm">加载中...</div>
+          <div className="px-6 py-4">
+            <SessionListSkeleton count={6} />
           </div>
         ) : filteredSessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
@@ -267,18 +346,19 @@ export function SessionList() {
         ) : (
           <div className="grid gap-2 max-w-5xl mx-auto">
             {filteredSessions.map((session) => (
-              <SessionItem
-                key={session.id}
-                session={session}
-                isActive={session.id === currentSessionId}
-                selectable={selectMode}
-                selected={selectedIds.has(session.id)}
-                models={models}
-                onSelect={() => handleSelectSession(session.id)}
-                onDelete={() => deleteSession(session.id)}
-                onRename={(title) => renameSession(session.id, title)}
-                onTogglePin={() => togglePin(session.id, !session.pinned)}
-              />
+              <div key={session.id} style={{ contentVisibility: "auto", containIntrinsicSize: "0 72px" }}>
+                <SessionItem
+                  session={session}
+                  isActive={session.id === currentSessionId}
+                  selectable={selectMode}
+                  selected={selectedIds.has(session.id)}
+                  models={models}
+                  onSelect={() => handleSelectSession(session.id)}
+                  onDelete={() => deleteSession(session.id)}
+                  onRename={(title) => renameSession(session.id, title)}
+                  onTogglePin={() => togglePin(session.id, !session.pinned)}
+                />
+              </div>
             ))}
           </div>
         )}

@@ -1,12 +1,30 @@
 /**
  * 消息气泡组件
- * 支持：复制 + 重新生成（最后一条 AI 消息）
+ * 支持：复制 + 重新生成（最后一条 AI 消息）+ 时间戳 + 移动端菜单 + 用户消息编辑
  */
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatMessage } from "../../types";
 import { ToolCallCard } from "./ToolCallCard";
 import { ThinkingBlock } from "./ThinkingBlock";
 import { MarkdownRenderer } from "./MarkdownRenderer";
+
+/** 格式化时间 */
+function formatTime(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function formatFullTime(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleString("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
 
 /** 图片点击放大模态框 */
 function ImageWithModal({ src }: { src: string }) {
@@ -50,21 +68,46 @@ interface Props {
   canRegenerate?: boolean;
   /** 重新生成回调 */
   onRegenerate?: () => void;
+  /** 编辑用户消息并重新发送回调 */
+  onEdit?: (newContent: string) => void;
 }
 
-export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerate }: Props) {
+export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerate, onEdit }: Props) {
   const isUser = message.type === "user";
   const [copied, setCopied] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState("");
+  const menuRef = useRef<HTMLDivElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 点击外部关闭菜单
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [showMenu]);
+
+  // 编辑模式自动聚焦
+  useEffect(() => {
+    if (editing && editRef.current) {
+      editRef.current.focus();
+      editRef.current.setSelectionRange(editRef.current.value.length, editRef.current.value.length);
+    }
+  }, [editing]);
 
   // 复制消息内容
   const handleCopy = useCallback(async () => {
     if (!message.content) return;
     try {
       await navigator.clipboard.writeText(message.content);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
     } catch {
-      // fallback：创建临时 textarea
       const ta = document.createElement("textarea");
       ta.value = message.content;
       ta.style.position = "fixed";
@@ -73,13 +116,87 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
     }
+    setCopied(true);
+    setShowMenu(false);
+    setTimeout(() => setCopied(false), 1500);
   }, [message.content]);
 
+  // 复制为 Markdown
+  const handleCopyMarkdown = useCallback(async () => {
+    if (!message.content) return;
+    try {
+      await navigator.clipboard.writeText(message.content);
+    } catch {}
+    setShowMenu(false);
+  }, [message.content]);
+
+  // 开始编辑用户消息
+  const handleStartEdit = useCallback(() => {
+    setEditValue(message.content);
+    setEditing(true);
+    setShowMenu(false);
+  }, [message.content]);
+
+  // 确认编辑
+  const handleConfirmEdit = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== message.content && onEdit) {
+      onEdit(trimmed);
+    }
+    setEditing(false);
+  }, [editValue, message.content, onEdit]);
+
+  // 取消编辑
+  const handleCancelEdit = useCallback(() => {
+    setEditing(false);
+    setEditValue("");
+  }, []);
+
+  // 编辑框键盘事件
+  const handleEditKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleConfirmEdit();
+      } else if (e.key === "Escape") {
+        handleCancelEdit();
+      }
+    },
+    [handleConfirmEdit, handleCancelEdit]
+  );
+
+  // 长按开始（移动端）
+  const handleTouchStart = useCallback(() => {
+    longPressTimer.current = setTimeout(() => {
+      setShowMenu(true);
+    }, 500);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  // 右键菜单（桌面端，替换默认行为）
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setShowMenu(true);
+    },
+    []
+  );
+
   return (
-    <div className={`group flex gap-3 mb-2 ${isUser ? "justify-end" : "justify-start"}`}>
+    <div
+      className={`group flex gap-3 mb-2 ${isUser ? "justify-end" : "justify-start"}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
+      onContextMenu={handleContextMenu}
+    >
       {/* AI 头像 */}
       {!isUser && (
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-bold shrink-0 mt-0.5">
@@ -88,7 +205,7 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
       )}
 
       {/* 消息内容 + 操作栏 */}
-      <div className={`max-w-[75%] ${isUser ? "items-end" : "items-start"} flex flex-col`}>
+      <div className={`max-w-[75%] ${isUser ? "items-end" : "items-start"} flex flex-col relative`}>
         <div
           className={`w-full rounded-2xl px-4 py-3 ${
             isUser
@@ -110,8 +227,34 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
             </div>
           )}
 
-          {/* 消息正文 */}
-          {message.content && (
+          {/* 消息正文（编辑模式 / 正常模式） */}
+          {editing ? (
+            <div className="mt-1">
+              <textarea
+                ref={editRef}
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onKeyDown={handleEditKeyDown}
+                className="w-full resize-none bg-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/50 outline-none border border-white/30 focus:border-white/60"
+                rows={Math.min(editValue.split("\n").length + 1, 8)}
+              />
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  onClick={handleConfirmEdit}
+                  className="px-3 py-1 text-xs bg-white/20 hover:bg-white/30 rounded-md transition-colors"
+                >
+                  重新发送
+                </button>
+                <button
+                  onClick={handleCancelEdit}
+                  className="px-3 py-1 text-xs text-white/60 hover:text-white/80 transition-colors"
+                >
+                  取消
+                </button>
+                <span className="text-[10px] text-white/40 ml-auto">Enter 发送 · Esc 取消</span>
+              </div>
+            </div>
+          ) : message.content ? (
             <div className="break-words text-[14px] leading-relaxed">
               {isUser ? (
                 <span className="whitespace-pre-wrap">{message.content}</span>
@@ -122,7 +265,7 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
                 <span className="inline-block w-[3px] h-4 bg-gradient-to-b from-blue-500 to-purple-500 rounded-full ml-0.5 align-text-bottom animate-pulse" />
               )}
             </div>
-          )}
+          ) : null}
 
           {/* 多模态图片 */}
           {message.images && message.images.length > 0 && (
@@ -144,26 +287,52 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
           )}
         </div>
 
-        {/* 操作按钮栏 — 悬浮在气泡下方 */}
-        {!isStreaming && message.content && (
+        {/* 时间戳 + 操作按钮栏 */}
+        {!isStreaming && !editing && (
           <div
-            className={`flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ${
+            className={`flex items-center gap-2 mt-1 ${
               isUser ? "justify-end" : "justify-start"
             }`}
-            style={{ opacity: undefined }}
           >
-            <ActionButton
-              icon={copied ? "✓" : "📋"}
-              label={copied ? "已复制" : "复制"}
-              onClick={handleCopy}
-              active={copied}
-            />
-            {canRegenerate && onRegenerate && (
+            {/* 时间戳（始终显示） */}
+            <span
+              className="text-[10px] text-neutral-300 select-none"
+              title={formatFullTime(message.timestamp)}
+            >
+              {formatTime(message.timestamp)}
+            </span>
+
+            {/* 操作按钮（hover 显示，移动端通过菜单操作） */}
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
               <ActionButton
-                icon="🔄"
-                label="重新生成"
-                onClick={onRegenerate}
+                icon={copied ? "✓" : "📋"}
+                label={copied ? "已复制" : "复制"}
+                onClick={handleCopy}
+                active={copied}
               />
+              {isUser && onEdit && (
+                <ActionButton icon="✏️" label="编辑" onClick={handleStartEdit} />
+              )}
+              {canRegenerate && onRegenerate && (
+                <ActionButton icon="🔄" label="重新生成" onClick={onRegenerate} />
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* 右键/长按上下文菜单 */}
+        {showMenu && (
+          <div
+            ref={menuRef}
+            className={`absolute z-50 ${isUser ? "right-0" : "left-0"} top-full mt-1 bg-white rounded-xl shadow-xl border border-neutral-200 py-1.5 min-w-[160px] animate-in fade-in zoom-in-95 duration-150`}
+          >
+            <MenuButton icon="📋" label="复制" onClick={handleCopy} />
+            <MenuButton icon="📝" label="复制为 Markdown" onClick={handleCopyMarkdown} />
+            {isUser && onEdit && (
+              <MenuButton icon="✏️" label="编辑并重新发送" onClick={handleStartEdit} />
+            )}
+            {canRegenerate && onRegenerate && (
+              <MenuButton icon="🔄" label="重新生成" onClick={() => { setShowMenu(false); onRegenerate(); }} />
             )}
           </div>
         )}
@@ -202,6 +371,19 @@ function ActionButton({
       title={label}
     >
       <span className="text-[11px]">{icon}</span>
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}
+
+/** 菜单按钮 */
+function MenuButton({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors"
+    >
+      <span className="text-sm">{icon}</span>
       <span>{label}</span>
     </button>
   );

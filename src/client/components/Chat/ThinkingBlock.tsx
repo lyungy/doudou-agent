@@ -1,7 +1,8 @@
 /**
  * Thinking 块组件（可折叠）
+ * 默认折叠，仅显示摘要信息；流式中自动展开
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface Props {
   content: string;
@@ -10,9 +11,22 @@ interface Props {
 }
 
 export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
+  // 默认折叠；流式过程中自动展开，完成后折叠
   const [expanded, setExpanded] = useState(true);
 
+  // 流式结束时自动折叠
+  useEffect(() => {
+    if (!isStreaming && content) {
+      const timer = setTimeout(() => setExpanded(false), 500);
+      return () => clearTimeout(timer);
+    }
+  }, [isStreaming]);
+
   if (!content) return null;
+
+  // 估算思考时长（基于内容长度粗算）
+  const charCount = content.length;
+  const estimatedSecs = Math.max(1, Math.round(charCount / 80));
 
   return (
     <div className="mb-2">
@@ -25,17 +39,21 @@ export function ThinkingBlock({ content, isUser, isStreaming }: Props) {
         }`}
       >
         <span className="text-[11px]">🧠</span>
-        <span>{isStreaming ? "思考中..." : "思考过程"}</span>
+        <span>{isStreaming ? "思考中..." : `思考过程 · ~${estimatedSecs}s`}</span>
         <span className="text-[10px] opacity-60">{expanded ? "▼" : "▶"}</span>
       </button>
 
       {expanded && (
-        <div className={`mt-2 pl-3 border-l-2 ${
-          isUser ? "border-white/30" : "border-purple-300"
-        }`}>
-          <div className={`text-xs whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed ${
-            isUser ? "text-white/70" : "text-neutral-500"
-          }`}>
+        <div
+          className={`mt-2 pl-3 border-l-2 ${
+            isUser ? "border-white/30" : "border-purple-300"
+          }`}
+        >
+          <div
+            className={`text-xs whitespace-pre-wrap max-h-80 overflow-y-auto leading-relaxed ${
+              isUser ? "text-white/70" : "text-neutral-500"
+            }`}
+          >
             {content}
           </div>
         </div>

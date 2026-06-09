@@ -1,7 +1,7 @@
 /**
  * 工具调用卡片组件（视觉优化）
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ToolCallInfo } from "../../types";
 
 interface Props {
@@ -9,7 +9,18 @@ interface Props {
 }
 
 export function ToolCallCard({ toolCall }: Props) {
-  const [expanded, setExpanded] = useState(false);
+  // 默认折叠；执行中自动展开，完成后折叠
+  const [expanded, setExpanded] = useState(toolCall.status === "running");
+
+  // 状态从 running 变为 done/error 时自动折叠
+  useEffect(() => {
+    if (toolCall.status !== "running") {
+      const timer = setTimeout(() => setExpanded(false), 300);
+      return () => clearTimeout(timer);
+    } else {
+      setExpanded(true);
+    }
+  }, [toolCall.status]);
 
   const borderColor =
     toolCall.status === "running"

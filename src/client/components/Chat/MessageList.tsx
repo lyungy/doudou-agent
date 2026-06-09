@@ -2,7 +2,7 @@
  * 消息列表组件
  * 智能滚动：用户在底部时自动跟随，向上滚动时锁定位置
  */
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { MessageBubble } from "./MessageBubble";
 import { useChat } from "../../hooks/useChat";
 import { useAppStore } from "../../store";
@@ -10,7 +10,7 @@ import { useAppStore } from "../../store";
 const BOTTOM_THRESHOLD = 50;
 
 export function MessageList() {
-  const { messages, isStreaming, regenerate } = useChat();
+  const { messages, isStreaming, regenerate, editMessage, messageSearch, messageSearchOpen, setMessageSearch, setMessageSearchOpen } = useChat();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
 
@@ -53,7 +53,59 @@ export function MessageList() {
     return () => cancelAnimationFrame(rafId);
   }, [isStreaming, isAtBottom, checkAtBottom]);
 
-  if (messages.length === 0) {
+  // 搜索过滤
+  const displayMessages = useMemo(() => {
+    if (!messageSearch.trim()) return messages;
+    const q = messageSearch.toLowerCase();
+    return messages.filter((m) => m.content?.toLowerCase().includes(q));
+  }, [messages, messageSearch]);
+
+  // Cmd+F 打开搜索
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+        e.preventDefault();
+        setMessageSearchOpen(true);
+      }
+      if (e.key === "Escape" && messageSearchOpen) {
+        setMessageSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [messageSearchOpen, setMessageSearchOpen]);
+
+  // 导出对话为 Markdown
+  const handleExportChat = useCallback(() => {
+    if (messages.length === 0) return;
+    const lines: string[] = ["# Doudou Agent 对话导出", "", `导出时间: ${new Date().toLocaleString("zh-CN")}`, "", "---", ""];
+    for (const msg of messages) {
+      const role = msg.type === "user" ? "👤 用户" : "🤖 AI";
+      const time = new Date(msg.timestamp).toLocaleString("zh-CN");
+      lines.push(`### ${role} · ${time}`, "");
+      if (msg.thinking) {
+        lines.push(`> 🧠 思考: ${msg.thinking.slice(0, 200)}${msg.thinking.length > 200 ? "..." : ""}`, "");
+      }
+      if (msg.content) {
+        lines.push(msg.content);
+      }
+      if (msg.toolCalls && msg.toolCalls.length > 0) {
+        for (const tc of msg.toolCalls) {
+          lines.push(`> 🔧 工具: ${tc.name} (${tc.status})`);
+        }
+      }
+      lines.push("", "---", "");
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `doudou-chat-${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [messages]);
+
+  if (displayMessages.length === 0 && !messageSearch) {
     return (
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="text-center max-w-md">
@@ -78,13 +130,62 @@ export function MessageList() {
     );
   }
 
-  const lastAssistantId = [...messages].reverse().find((m) => m.type === "assistant")?.id;
+  const lastAssistantId = [...displayMessages].reverse().find((m) => m.type === "assistant")?.id;
 
   return (
     <>
+      {/* 搜索栏 + 工具栏 */}
+      {(messageSearchOpen || messages.length > 0) && (
+        <div className="px-4 py-1.5 bg-white border-b border-neutral-200 flex items-center gap-2">
+          {messageSearchOpen ? (
+            <>
+              <span className="text-neutral-400 text-sm">🔍</span>
+              <input
+                type="text"
+                value={messageSearch}
+                onChange={(e) => setMessageSearch(e.target.value)}
+                placeholder="搜索消息内容... (Cmd+F)"
+                className="flex-1 text-sm bg-transparent outline-none placeholder-neutral-400"
+                autoFocus
+              />
+              {messageSearch && (
+                <span className="text-xs text-neutral-400">
+                  {messages.filter((m) => m.content?.toLowerCase().includes(messageSearch.toLowerCase())).length} 条结果
+                </span>
+              )}
+              <button
+                onClick={() => setMessageSearchOpen(false)}
+                className="text-neutral-400 hover:text-neutral-600 text-xs px-2 py-1"
+              >
+                ✕
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-xs text-neutral-400">{messages.length} 条消息</span>
+              <div className="flex-1" />
+              <button
+                onClick={() => setMessageSearchOpen(true)}
+                className="text-neutral-400 hover:text-neutral-600 text-xs px-2 py-1 rounded hover:bg-neutral-100 transition-colors"
+                title="搜索消息 (Cmd+F)"
+              >
+                🔍
+              </button>
+              <button
+                onClick={handleExportChat}
+                className="text-neutral-400 hover:text-neutral-600 text-xs px-2 py-1 rounded hover:bg-neutral-100 transition-colors"
+                title="导出对话为 Markdown"
+              >
+                📤
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          {messages.map((msg) => {
+          {displayMessages.map((msg) => {
             const isLastAssistant = msg.type === "assistant" && msg.id === lastAssistantId;
             return (
               <div key={msg.id} className="group">
@@ -93,6 +194,7 @@ export function MessageList() {
                   isStreaming={isLastAssistant && isStreaming}
                   canRegenerate={isLastAssistant && !isStreaming}
                   onRegenerate={regenerate}
+                  onEdit={msg.type === "user" ? (newContent) => editMessage(msg.id, newContent) : undefined}
                 />
               </div>
             );
@@ -101,7 +203,7 @@ export function MessageList() {
       </div>
 
       {/* 回到底部按钮 — fixed 定位，相对于视口，不被任何容器裁剪 */}
-      {messages.length > 0 && !isAtBottom && (
+      {displayMessages.length > 0 && !isAtBottom && (
         <button
           onClick={() => {
             const el = scrollRef.current;

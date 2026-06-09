@@ -21,6 +21,7 @@ import { PerformanceChart } from "./PerformanceChart";
 import { ModelPieChart } from "./ModelPieChart";
 import { TaskStatusCard } from "./TaskStatusCard";
 import { ErrorChart } from "./ErrorChart";
+import { DashboardSkeleton } from "../common/Skeleton";
 
 export function Dashboard() {
   const [overview, setOverview] = useState<StatsOverviewType | null>(null);

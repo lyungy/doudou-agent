@@ -1,6 +1,6 @@
 /**
  * 对话状态 slice
- * 管理消息列表、SSE 流式对话、LLM 状态
+ * 管理消息列表、SSE 流式对话、LLM 状态、消息搜索
  */
 import type { ChatMessage, ToolCallInfo, LLMRequestStatus, LLMStatusData, CumulativeTokens } from "../../types";
 import * as api from "../../lib/client";
@@ -15,15 +15,21 @@ export interface ChatState {
   currentToolCalls: ToolCallInfo[];
   llmStatusBySession: Record<string, LLMStatusData>;
   cumulativeTokensBySession: Record<string, CumulativeTokens>;
+  // 消息搜索
+  messageSearch: string;
+  messageSearchOpen: boolean;
 }
 
 export interface ChatActions {
   sendMessage: (content: string, images?: Array<{ data: string; mimeType: string }>) => Promise<void>;
   regenerateMessage: () => Promise<void>;
+  editAndResend: (messageId: string, newContent: string) => Promise<void>;
   abortChat: () => void;
   getCurrentLLMStatus: () => LLMStatusData | null;
   setLLMStatus: (sessionId: string, data: LLMStatusData | null) => void;
   refreshCumulativeTokens: (sessionId: string) => Promise<void>;
+  setMessageSearch: (q: string) => void;
+  setMessageSearchOpen: (open: boolean) => void;
   // 内部方法
   _resumeStream: (sessionId: string) => Promise<void>;
   _setStreaming: (v: boolean) => void;
@@ -48,6 +54,8 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
   currentToolCalls: [],
   llmStatusBySession: {},
   cumulativeTokensBySession: {},
+  messageSearch: "",
+  messageSearchOpen: false,
 
   getCurrentLLMStatus: () => {
     const { currentSessionId, llmStatusBySession } = get();
@@ -77,6 +85,9 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
       // 静默失败，不影响用户体验
     }
   },
+
+  setMessageSearch: (q) => set({ messageSearch: q }),
+  setMessageSearchOpen: (open) => set({ messageSearchOpen: open, messageSearch: open ? get().messageSearch : "" }),
 
   sendMessage: async (content: string, images?: Array<{ data: string; mimeType: string }>) => {
     const { currentSessionId } = get();
@@ -188,6 +199,24 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
     }
     set({ messages: trimmed });
     await get().sendMessage(lastUserMsg.content, lastUserMsg.images);
+  },
+
+  /** 编辑用户消息并重新发送 */
+  editAndResend: async (messageId: string, newContent: string) => {
+    const { messages, isStreaming } = get();
+    if (isStreaming) return;
+
+    // 找到该用户消息的位置
+    const idx = messages.findIndex((m: ChatMessage) => m.id === messageId);
+    if (idx === -1) return;
+
+    // 截断：保留该消息之前的内容 + 更新该消息内容
+    const trimmed = messages.slice(0, idx);
+    const oldMsg = messages[idx];
+    trimmed.push({ ...oldMsg, content: newContent });
+
+    set({ messages: trimmed });
+    await get().sendMessage(newContent, oldMsg.images);
   },
 
   abortChat: () => {

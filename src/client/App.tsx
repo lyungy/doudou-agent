@@ -1,23 +1,31 @@
 /**
  * 主界面布局
  * 左侧导航栏 + 右侧内容区（按 currentView 联动）
+ * 路由级 React.lazy 代码分割
  */
 import { useAppStore } from "./store";
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { Navigation } from "./components/Navigation/Navigation";
-import { HomePage } from "./components/HomePage";
-import { MessageList } from "./components/Chat/MessageList";
-import { InputBox } from "./components/Chat/InputBox";
-import { ModelSelector } from "./components/Config/ModelSelector";
-import { SystemPromptEditor } from "./components/Config/SystemPromptEditor";
-import { TemplateManager } from "./components/Config/TemplateManager";
-import { PromptTemplates } from "./components/Chat/PromptTemplates";
-import { LLMStatusBar } from "./components/Chat/LLMStatusBar";
-import { ContextUsageBar } from "./components/Chat/ContextUsageBar";
-import { LogPanel } from "./components/Logs/LogPanel";
-import { TaskPanel } from "./components/Tasks/TaskPanel";
-import { TaskLogList } from "./components/Tasks/TaskLogList";
-import { SessionList } from "./components/SessionManager/SessionList";
+import { ToastContainer } from "./components/common/Toast";
+
+// 懒加载各页面组件（按视图拆分 chunk）
+const HomePage = lazy(() => import("./components/HomePage").then((m) => ({ default: m.HomePage })));  
+// Note: HomePage is a named export, need wrapper
+
+// 直接用 lazy 的组件
+const MessageList = lazy(() => import("./components/Chat/MessageList").then((m) => ({ default: m.MessageList })));
+const InputBox = lazy(() => import("./components/Chat/InputBox").then((m) => ({ default: m.InputBox })));
+const PromptTemplates = lazy(() => import("./components/Chat/PromptTemplates").then((m) => ({ default: m.PromptTemplates })));
+const LLMStatusBar = lazy(() => import("./components/Chat/LLMStatusBar").then((m) => ({ default: m.LLMStatusBar })));
+const ContextUsageBar = lazy(() => import("./components/Chat/ContextUsageBar").then((m) => ({ default: m.ContextUsageBar })));
+const ModelSelector = lazy(() => import("./components/Config/ModelSelector").then((m) => ({ default: m.ModelSelector })));
+const SystemPromptEditor = lazy(() => import("./components/Config/SystemPromptEditor").then((m) => ({ default: m.SystemPromptEditor })));
+const TemplateManager = lazy(() => import("./components/Config/TemplateManager").then((m) => ({ default: m.TemplateManager })));
+const LogPanel = lazy(() => import("./components/Logs/LogPanel").then((m) => ({ default: m.LogPanel })));
+const TaskPanel = lazy(() => import("./components/Tasks/TaskPanel").then((m) => ({ default: m.TaskPanel })));
+const TaskLogList = lazy(() => import("./components/Tasks/TaskLogList").then((m) => ({ default: m.TaskLogList })));
+const SessionList = lazy(() => import("./components/SessionManager/SessionList").then((m) => ({ default: m.SessionList })));
+const Dashboard = lazy(() => import("./components/Dashboard/index").then((m) => ({ default: m.Dashboard })));
 
 export default function App() {
   const { currentView, currentSessionId, logSubView, initApp, selectSession, sessions } = useAppStore();
@@ -50,47 +58,64 @@ export default function App() {
 
   return (
     <div className="flex h-screen bg-neutral-50">
+      {/* 全局 Toast 通知 */}
+      <ToastContainer />
+
       {/* 左侧导航栏 */}
       <Navigation />
 
       {/* 右侧内容区 */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* 首页/对话视图需要顶栏 */}
-        {currentView === "home" && (
-          <>
-            <TopBar />
-            <HomePage />
-          </>
-        )}
+        <Suspense fallback={<PageLoader />}>
+          {/* 首页/对话视图需要顶栏 */}
+          {currentView === "home" && (
+            <>
+              <TopBar />
+              <HomePage />
+            </>
+          )}
 
-        {currentView === "chat" && (
-          <>
-            <TopBar />
-            {currentSessionId ? (
-              <ChatView />
-            ) : (
-              <EmptyChatHint />
-            )}
-          </>
-        )}
+          {currentView === "chat" && (
+            <>
+              <TopBar />
+              {currentSessionId ? (
+                <ChatView />
+              ) : (
+                <EmptyChatHint />
+              )}
+            </>
+          )}
 
-        {currentView === "session" && <SessionList />}
+          {currentView === "session" && <SessionList />}
 
-        {currentView === "tasks" && (
-          <>
-            <TopBar />
-            <TaskPanel />
-          </>
-        )}
+          {currentView === "tasks" && (
+            <>
+              <TopBar />
+              <TaskPanel />
+            </>
+          )}
 
-        {currentView === "logs" && (
-          <>
-            <TopBar />
-            {logSubView === "task-runs" ? <TaskLogList /> : <LogPanel />}
-          </>
-        )}
+          {currentView === "logs" && (
+            <>
+              <TopBar />
+              {logSubView === "task-runs" ? <TaskLogList /> : <LogPanel />}
+            </>
+          )}
 
-        {currentView === "config" && <ConfigView />}
+          {currentView === "config" && <ConfigView />}
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+/** 页面加载中 fallback */
+function PageLoader() {
+  return (
+    <div className="flex-1 flex items-center justify-center bg-neutral-50">
+      <div className="flex items-center gap-3">
+        <span className="w-5 h-5 border-2 border-neutral-300 border-t-blue-500 rounded-full animate-spin" />
+        <span className="text-sm text-neutral-400">加载中...</span>
       </div>
     </div>
   );
