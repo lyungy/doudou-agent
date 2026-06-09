@@ -52,7 +52,7 @@ export function Dashboard() {
       setPerformance(pf);
       setErrors(er);
     } catch (err) {
-      console.error("加载统计数据失败:", err);
+      
     }
     setLoading(false);
   }

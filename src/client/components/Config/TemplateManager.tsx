@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from "react";
 import * as api from "../../lib/client";
 import type { PromptTemplate } from "../../types";
 import { ConfirmModal } from "../common/ConfirmModal";
+import { useAppStore } from "../../store";
 
 export function TemplateManager() {
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
@@ -13,6 +14,7 @@ export function TemplateManager() {
   const [editing, setEditing] = useState<PromptTemplate | null>(null); // null = 关闭弹窗
   const [creating, setCreating] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<PromptTemplate | null>(null);
+  const addToast = useAppStore((s) => s.addToast);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -29,15 +31,23 @@ export function TemplateManager() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const handleToggle = async (tpl: PromptTemplate) => {
-    await api.toggleTemplateEnabled(tpl.id, !tpl.enabled);
-    loadAll();
+    try {
+      await api.toggleTemplateEnabled(tpl.id, !tpl.enabled);
+      loadAll();
+    } catch (err: any) {
+      addToast("error", `操作失败: ${err.message}`);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    await api.deleteTemplate(deleteTarget.id);
-    setDeleteTarget(null);
-    loadAll();
+    try {
+      await api.deleteTemplate(deleteTarget.id);
+      setDeleteTarget(null);
+      loadAll();
+    } catch (err: any) {
+      addToast("error", `删除失败: ${err.message}`);
+    }
   };
 
   const handleSave = async (data: {
@@ -48,28 +58,30 @@ export function TemplateManager() {
     category: string;
     content: string;
   }) => {
-    if (data.id) {
-      // 更新
-      await api.updateTemplate(data.id, {
-        name: data.name,
-        description: data.description,
-        icon: data.icon,
-        category: data.category,
-        content: data.content,
-      });
-    } else {
-      // 新建
-      await api.createTemplate({
-        name: data.name,
-        description: data.description,
-        icon: data.icon,
-        category: data.category,
-        content: data.content,
-      });
+    try {
+      if (data.id) {
+        await api.updateTemplate(data.id, {
+          name: data.name,
+          description: data.description,
+          icon: data.icon,
+          category: data.category,
+          content: data.content,
+        });
+      } else {
+        await api.createTemplate({
+          name: data.name,
+          description: data.description,
+          icon: data.icon,
+          category: data.category,
+          content: data.content,
+        });
+      }
+      setEditing(null);
+      setCreating(false);
+      loadAll();
+    } catch (err: any) {
+      addToast("error", `保存失败: ${err.message}`);
     }
-    setEditing(null);
-    setCreating(false);
-    loadAll();
   };
 
   return (

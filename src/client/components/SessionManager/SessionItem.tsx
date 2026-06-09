@@ -2,7 +2,7 @@
  * Session 卡片组件（会话管理页使用）
  * 卡片式布局：标题 + 消息预览 + 模型 tag + 消息数 + 时间 + 操作按钮
  */
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, memo } from "react";
 import type { SessionMeta, ModelDef } from "../../types";
 import { ConfirmModal } from "../common/ConfirmModal";
 import { generateSessionUrl } from "../../lib/url";
@@ -52,7 +52,7 @@ function getModelColor(modelId: string): string {
   return MODEL_COLORS[Math.abs(hash) % MODEL_COLORS.length];
 }
 
-export function SessionItem({ session, isActive, selectable, selected, models, onSelect, onDelete, onRename, onTogglePin }: Props) {
+export const SessionItem = memo(function SessionItem({ session, isActive, selectable, selected, models, onSelect, onDelete, onRename, onTogglePin }: Props) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [showConfirm, setShowConfirm] = useState(false);
@@ -243,4 +243,4 @@ export function SessionItem({ session, isActive, selectable, selected, models, o
       />
     </>
   );
-}
+});

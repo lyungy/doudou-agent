@@ -94,7 +94,7 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
       const messages = convertToChatMessages(rawMessages);
       set({ messages, loadingSession: false });
     } catch (err: any) {
-      console.error("加载消息失败:", err.message);
+      
       set({ loadingSession: false });
     }
 
@@ -123,7 +123,7 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
     try {
       await api.deleteSession(id);
     } catch (err: any) {
-      console.error("删除失败:", err.message);
+      
       get().loadSessions();
     }
   },
@@ -141,7 +141,7 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
     try {
       await api.deleteSessions(ids);
     } catch (err: any) {
-      console.error("批量删除失败:", err.message);
+      
       get().loadSessions();
     }
   },
@@ -153,7 +153,7 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
     try {
       await api.updateSessionTitle(id, title);
     } catch (err: any) {
-      console.error("重命名失败:", err.message);
+      
       get().loadSessions();
     }
   },
@@ -167,7 +167,7 @@ export const createSessionSlice = (set: any, get: any): SessionSlice => ({
     try {
       await api.toggleSessionPin(id, pinned);
     } catch (err: any) {
-      console.error("置顶失败:", err.message);
+      
       get().loadSessions();
     }
   },
@@ -184,7 +184,7 @@ export async function restoreSessionFromUrl(get: any): Promise<void> {
   if (isValidSessionId(urlSessionId, sessions.map((s: SessionMeta) => s.id))) {
     await get().selectSession(urlSessionId, false);
   } else {
-    console.warn("URL 中的会话 ID 无效，已清除:", urlSessionId);
+    
     updateUrlWithSession(null);
   }
 }

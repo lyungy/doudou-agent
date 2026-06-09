@@ -8,7 +8,9 @@ import type { MainView, LogSubView } from "../../types";
 import { generateSessionUrl } from "../../lib/url";
 
 export function Navigation() {
-  const { currentView, setCurrentView, createSession } = useAppStore();
+  const currentView = useAppStore((s) => s.currentView);
+  const setCurrentView = useAppStore((s) => s.setCurrentView);
+  const createSession = useAppStore((s) => s.createSession);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 

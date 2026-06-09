@@ -27,7 +27,10 @@ const TIME_OPTIONS: { value: string; label: string }[] = [
 
 /** 将时间范围快捷值转为 ISO 8601（扩展支持 7d/30d） */
 export function TaskLogList() {
-  const { taskRuns, taskRunsTotal, loadingTaskRuns, loadTaskRuns } = useAppStore();
+  const taskRuns = useAppStore((s) => s.taskRuns);
+  const taskRunsTotal = useAppStore((s) => s.taskRunsTotal);
+  const loadingTaskRuns = useAppStore((s) => s.loadingTaskRuns);
+  const loadTaskRuns = useAppStore((s) => s.loadTaskRuns);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [since, setSince] = useState("");

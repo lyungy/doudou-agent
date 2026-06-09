@@ -8,7 +8,13 @@ import { TaskForm } from "./TaskForm";
 import { ConfirmModal } from "../common/ConfirmModal";
 
 export function TaskPanel() {
-  const { tasks, loadingTasks, loadTasks, deleteTask, toggleTask, triggerTask, models } = useAppStore();
+  const tasks = useAppStore((s) => s.tasks);
+  const loadingTasks = useAppStore((s) => s.loadingTasks);
+  const loadTasks = useAppStore((s) => s.loadTasks);
+  const deleteTask = useAppStore((s) => s.deleteTask);
+  const toggleTask = useAppStore((s) => s.toggleTask);
+  const triggerTask = useAppStore((s) => s.triggerTask);
+  const models = useAppStore((s) => s.models);
   const [showForm, setShowForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [triggering, setTriggering] = useState<string | null>(null);

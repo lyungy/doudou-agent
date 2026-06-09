@@ -7,7 +7,9 @@ import { useAppStore } from "../../store";
 import type { PromptTemplate } from "../../types";
 
 export function PromptTemplates() {
-  const { templates, loadingTemplates, loadTemplates } = useAppStore();
+  const templates = useAppStore((s) => s.templates);
+  const loadingTemplates = useAppStore((s) => s.loadingTemplates);
+  const loadTemplates = useAppStore((s) => s.loadTemplates);
 
   useEffect(() => {
     if (templates.length === 0 && !loadingTemplates) {

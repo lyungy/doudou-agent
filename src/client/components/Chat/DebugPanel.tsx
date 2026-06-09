@@ -121,7 +121,10 @@ function formatTime(ts: number): string {
 }
 
 export function DebugPanel() {
-  const { debugPanelOpen, debugEntries, toggleDebugPanel, clearDebugEntries } = useAppStore();
+  const debugPanelOpen = useAppStore((s) => s.debugPanelOpen);
+  const debugEntries = useAppStore((s) => s.debugEntries);
+  const toggleDebugPanel = useAppStore((s) => s.toggleDebugPanel);
+  const clearDebugEntries = useAppStore((s) => s.clearDebugEntries);
   const scrollRef = useRef<HTMLDivElement>(null);
   const autoScrollRef = useRef(true);
 

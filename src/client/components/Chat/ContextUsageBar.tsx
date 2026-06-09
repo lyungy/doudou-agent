@@ -34,7 +34,7 @@ export function ContextUsageBar() {
     if (currentSessionId && !tokens) {
       refreshCumulativeTokens(currentSessionId);
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, tokens, refreshCumulativeTokens]);
 
   // 无数据时不显示
   if (!tokens || tokens.requestCount === 0) return null;

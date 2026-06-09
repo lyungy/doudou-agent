@@ -12,6 +12,9 @@ import { getLogger } from "./logger.js";
 import { getOrCreateAgent, removeAgent } from "./agent.js";
 import { getModelById } from "./config.js";
 
+/** 执行记录最大保留条数（超出时淘汰最旧的） */
+const MAX_RUNS = 2000;
+
 // ============ 类型定义 ============
 
 /** 任务类型 */
@@ -78,6 +81,7 @@ class TaskScheduler {
     this.tasksPath = join(dataDir, "tasks.json");
     this.runsPath = join(dataDir, "task-runs.jsonl");
     this.loadTasks();
+    this.pruneRuns();
     this.startAll();
   }
 
@@ -337,8 +341,7 @@ class TaskScheduler {
         output = lastAssistant.content
           .filter((c: any) => c.type === "text")
           .map((c: any) => c.text)
-          .join("")
-          .slice(0, 500);
+          .join("");
       }
 
       // 清理 Agent 实例
@@ -354,7 +357,7 @@ class TaskScheduler {
       run.status = err.message?.includes("超时") ? "timeout" : "failed";
       run.finishedAt = new Date().toISOString();
       run.duration = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
-      run.error = err.message?.slice(0, 500) || String(err);
+      run.error = err.message || String(err);
 
       logger.error("task", "任务执行失败", { taskId: task.id, runId, status: run.status, error: run.error });
     }
@@ -378,6 +381,9 @@ class TaskScheduler {
 
     this.saveTasks();
     this.updateRun(run);
+
+    // 定期清理超出上限的执行记录
+    this.pruneRuns();
 
     return run;
   }
@@ -435,6 +441,27 @@ class TaskScheduler {
         runs[idx] = run;
         writeFileSync(this.runsPath, runs.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf-8");
       }
+    } catch { /* ignore */ }
+  }
+
+  /** 清理超出上限的旧执行记录，保留最新 MAX_RUNS 条 */
+  private pruneRuns(): void {
+    try {
+      if (!existsSync(this.runsPath)) return;
+      const content = readFileSync(this.runsPath, "utf-8");
+      const lines = content.trim().split("\n").filter(Boolean);
+      if (lines.length <= MAX_RUNS) return;
+      // 按时间倒序，保留最新的 MAX_RUNS 条
+      const runs: TaskRun[] = [];
+      for (const line of lines) {
+        try { runs.push(JSON.parse(line)); } catch { /* skip */ }
+      }
+      runs.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+      const kept = runs.slice(0, MAX_RUNS);
+      // 按时间正序写回
+      kept.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+      writeFileSync(this.runsPath, kept.map((r) => JSON.stringify(r)).join("\n") + "\n", "utf-8");
+      getLogger().info("task", `执行记录已清理：${lines.length} → ${kept.length} 条`);
     } catch { /* ignore */ }
   }
 }

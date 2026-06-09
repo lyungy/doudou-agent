@@ -39,7 +39,7 @@ export const createTemplateSlice = (set: any): TemplateSlice => ({
         set({ pendingTemplateContent: full.content });
       }
     } catch (err: any) {
-      console.error("加载模板失败:", err.message);
+      // 加载失败静默处理，UI 显示空状态
     }
   },
   clearPendingTemplate: () => set({ pendingTemplateContent: null }),

@@ -45,19 +45,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await get().loadModels();
     } catch (err: any) {
-      console.error("加载模型列表失败:", err.message);
+      
     }
     // 2. 加载会话列表（失败不影响后续）
     try {
       await get().loadSessions();
     } catch (err: any) {
-      console.error("加载会话列表失败:", err.message);
+      
     }
     // 3. 从 URL 恢复会话状态
     try {
       await restoreSessionFromUrl(get);
     } catch (err: any) {
-      console.error("恢复会话状态失败:", err.message);
+      
       updateUrlWithSession(null);
     }
   },

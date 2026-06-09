@@ -145,26 +145,32 @@ export async function streamChat(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // 解析 SSE 事件（一行一行处理）
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      // 按完整事件块（\n\n）分割，避免 event: 和 data: 被 TCP 分包割裂
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
 
-      let eventType = "";
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith("data: ")) {
-          const dataStr = line.slice(6);
-          if (!eventType || eventType === "heartbeat") continue;
+      for (const block of parts) {
+        if (!block.trim()) continue;
 
-          try {
-            const data = JSON.parse(dataStr);
-            handleSSEEvent(eventType, data, callbacks);
-            if (eventType === "done") receivedDone = true;
-            if (eventType === "error") receivedError = true;
-          } catch {
-            // 忽略解析失败的行
+        let eventType = "";
+        let dataStr = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataStr = line.slice(6);
           }
+        }
+
+        if (!eventType || eventType === "heartbeat" || !dataStr) continue;
+
+        try {
+          const data = JSON.parse(dataStr);
+          handleSSEEvent(eventType, data, callbacks);
+          if (eventType === "done") receivedDone = true;
+          if (eventType === "error") receivedError = true;
+        } catch {
+          // 忽略解析失败的事件
         }
       }
     }
@@ -277,23 +283,27 @@ export async function resumeChat(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
 
-      let eventType = "";
-      for (const line of lines) {
-        if (line.startsWith("event: ")) {
-          eventType = line.slice(7).trim();
-        } else if (line.startsWith("data: ")) {
-          const dataStr = line.slice(6);
-          if (!eventType || eventType === "heartbeat") continue;
-          try {
-            const data = JSON.parse(dataStr);
-            handleResumeEvent(eventType, data, callbacks);
-            if (eventType === "done") receivedDone = true;
-            if (eventType === "error") receivedError = true;
-          } catch {}
+      for (const block of parts) {
+        if (!block.trim()) continue;
+        let eventType = "";
+        let dataStr = "";
+        for (const line of block.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataStr = line.slice(6);
+          }
         }
+        if (!eventType || eventType === "heartbeat" || !dataStr) continue;
+        try {
+          const data = JSON.parse(dataStr);
+          handleResumeEvent(eventType, data, callbacks);
+          if (eventType === "done") receivedDone = true;
+          if (eventType === "error") receivedError = true;
+        } catch {}
       }
     }
   } catch (err: any) {

@@ -54,7 +54,7 @@ export function SessionList() {
   useEffect(() => {
     const timer = setTimeout(() => loadSessions(), sessionSearch.trim() ? 300 : 0);
     return () => clearTimeout(timer);
-  }, [sessionSearch, searchContent]);
+  }, [sessionSearch, searchContent, loadSessions]);
 
   // 筛选 + 排序逻辑
   const filteredSessions = useMemo(() => {

@@ -2,7 +2,7 @@
  * 消息气泡组件（大气风格）
  * 支持：复制 + 重新生成 + 时间戳 + 右键/长按菜单 + 用户消息编辑
  */
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, memo } from "react";
 import type { ChatMessage } from "../../types";
 import { ToolCallCard } from "./ToolCallCard";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -49,7 +49,7 @@ interface Props {
   onEdit?: (newContent: string) => void;
 }
 
-export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerate, onEdit }: Props) {
+export const MessageBubble = memo(function MessageBubble({ message, isStreaming, canRegenerate, onRegenerate, onEdit }: Props) {
   const isUser = message.type === "user";
   const [copied, setCopied] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
@@ -227,7 +227,7 @@ export function MessageBubble({ message, isStreaming, canRegenerate, onRegenerat
       )}
     </div>
   );
-}
+});
 
 function ActionButton({ icon, label, onClick, active }: { icon: string; label: string; onClick: () => void; active?: boolean }) {
   return (
