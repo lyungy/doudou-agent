@@ -470,6 +470,14 @@ export async function fetchTaskRunStats(): Promise<{
   return request("/tasks/runs/stats");
 }
 
+/** 获取单条任务执行详情（含完整 output/error + 任务 prompt） */
+export async function fetchTaskRunDetail(runId: string): Promise<{
+  run: TaskRun;
+  task: { prompt: string; cron: string; type: string } | null;
+}> {
+  return request(`/tasks/runs/${runId}`);
+}
+
 // ============ Stats API ============
 
 export interface StatsOverview {

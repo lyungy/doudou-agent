@@ -91,6 +91,16 @@ router.get("/runs/stats", (_req: Request, res: Response) => {
   res.json(stats);
 });
 
+/** GET /runs/:runId — 单条执行详情（含完整 output/error） */
+router.get("/runs/:runId", (req: Request, res: Response) => {
+  const scheduler = getTaskScheduler();
+  const run = scheduler.getRunById(req.params.runId as string);
+  if (!run) return res.status(404).json({ error: "执行记录不存在" });
+  // 附带任务定义（含 prompt）
+  const task = scheduler.getById(run.taskId);
+  res.json({ run, task: task ? { prompt: task.prompt, cron: task.cron, type: task.type } : null });
+});
+
 /** GET /:id/runs — 查询指定任务执行日志（支持筛选和分页） */
 router.get("/:id/runs", (req: Request, res: Response) => {
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;

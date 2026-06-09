@@ -7,6 +7,7 @@ import { useAppStore } from "../../store";
 import * as api from "../../lib/client";
 import { Pagination } from "../common/Pagination";
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS, formatDuration, resolveTimeRange } from "../../lib/utils";
+import { TaskRunDetailModal } from "./TaskRunDetailModal";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "", label: "全部状态" },
@@ -30,6 +31,7 @@ export function TaskLogList() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [since, setSince] = useState("");
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const pageSize = 30;
 
   // 统计数据
@@ -183,7 +185,12 @@ export function TaskLogList() {
                 </thead>
                 <tbody>
                   {taskRuns.map((run) => (
-                    <tr key={run.id} className="border-b border-neutral-100 hover:bg-blue-50/40 group">
+                    <tr
+                      key={run.id}
+                      className="border-b border-neutral-100 hover:bg-blue-50/40 cursor-pointer group"
+                      onClick={() => setSelectedRunId(run.id)}
+                      title="点击查看详情"
+                    >
                       <td className="py-2 pr-4 text-neutral-800 font-medium">{run.taskName}</td>
                       <td className="py-2 pr-3">
                         <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold ${statusColors[run.status] || ""}`}>
@@ -214,6 +221,12 @@ export function TaskLogList() {
           </>
         )}
       </div>
+
+      {/* 执行详情弹窗 */}
+      <TaskRunDetailModal
+        runId={selectedRunId}
+        onClose={() => setSelectedRunId(null)}
+      />
     </div>
   );
 }

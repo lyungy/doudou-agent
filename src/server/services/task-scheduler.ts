@@ -201,6 +201,12 @@ class TaskScheduler {
     return { runs, total };
   }
 
+  /** 根据 runId 获取单条执行记录（含完整 output/error） */
+  getRunById(runId: string): TaskRun | undefined {
+    const allRuns = this.loadRuns();
+    return allRuns.find((r) => r.id === runId);
+  }
+
   /** 获取所有任务的执行统计 */
   getRunStats(): {
     total: number;
