@@ -6,11 +6,23 @@ import type { ChatMessage, ToolCallInfo } from "../../types";
 
 /**
  * 将 pi-agent-core 的消息格式转换为前端 ChatMessage
+ *
+ * JSONL 消息格式：
+ * - assistant: { role: "assistant", content: [{ type: "toolCall", toolCallId, toolName, arguments }, ...] }
+ * - toolResult: { role: "toolResult", toolCallId, toolName, content, isError }  ← 独立消息
+ *
+ * SSE 流式格式：
+ * - tool_exec_start → { toolCallId, toolName, args }
+ * - tool_exec_end   → { toolCallId, toolName, result: {content, details, isError} }
+ *
+ * 刷新后需要从 toolResult 消息中恢复 result 到对应的 toolCall
  */
 export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
-  for (const msg of rawMessages) {
+  for (let i = 0; i < rawMessages.length; i++) {
+    const msg = rawMessages[i];
+
     if (msg.role === "user") {
       const content =
         typeof msg.content === "string"
@@ -45,6 +57,30 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
 
       if (!textParts && !thinkingParts && (!toolCalls || toolCalls.length === 0)) continue;
 
+      // 从后续的 toolResult 消息中恢复 result 到对应的 toolCall
+      if (toolCalls && toolCalls.length > 0) {
+        // 收集后续连续的 toolResult 消息（它们紧跟在 assistant 消息之后）
+        const toolResults: Record<string, any> = {};
+        let j = i + 1;
+        while (j < rawMessages.length && rawMessages[j]?.role === "toolResult") {
+          const tr = rawMessages[j];
+          toolResults[tr.toolCallId] = {
+            content: tr.content || [],
+            details: tr.details,
+            isError: tr.isError || false,
+          };
+          j++;
+        }
+
+        // 将 result 附加到对应的 toolCall
+        for (const tc of toolCalls) {
+          if (toolResults[tc.id]) {
+            tc.result = toolResults[tc.id];
+            tc.isError = toolResults[tc.id].isError;
+          }
+        }
+      }
+
       messages.push({
         id: `assistant-${messages.length}`,
         type: "assistant",
@@ -53,6 +89,11 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         toolCalls: toolCalls && toolCalls.length > 0 ? toolCalls : undefined,
         timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
       });
+    }
+    // role === "toolResult" 已在上面的 assistant 循环中处理，跳过
+    else if (msg.role === "toolResult") {
+      // 已在对应的 assistant 消息处理中消费，跳过
+      continue;
     }
   }
 
