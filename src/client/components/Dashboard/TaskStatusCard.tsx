@@ -1,19 +1,29 @@
 /**
  * 任务执行状态卡片
+ * 使用 stats API 获取全量统计数据，避免 limit 导致成功率失真
  */
 import { useEffect, useState } from "react";
-import type { Task, TaskRun } from "../../types";
-import { fetchTasks, fetchTaskRuns } from "../../lib/client";
+import type { Task } from "../../types";
+import { fetchTasks, fetchTaskRunStats, fetchTaskRuns } from "../../lib/client";
+
+interface RunStats {
+  total: number;
+  success: number;
+  failed: number;
+  timeout: number;
+  running: number;
+}
 
 interface Props {
   /** 可选：从外部传入数据，不传则自行加载 */
   tasks?: Task[];
-  taskRuns?: TaskRun[];
+  taskRuns?: any[];
 }
 
 export function TaskStatusCard({ tasks: tasksProp, taskRuns: runsProp }: Props) {
   const [tasks, setTasks] = useState<Task[]>(tasksProp ?? []);
-  const [runs, setRuns] = useState<TaskRun[]>(runsProp ?? []);
+  const [stats, setStats] = useState<RunStats | null>(null);
+  const [lastRun, setLastRun] = useState<any | null>(null);
   const [loading, setLoading] = useState(!tasksProp);
 
   useEffect(() => {
@@ -21,9 +31,14 @@ export function TaskStatusCard({ tasks: tasksProp, taskRuns: runsProp }: Props) 
     (async () => {
       setLoading(true);
       try {
-        const [t, r] = await Promise.all([fetchTasks(), fetchTaskRuns()]);
+        const [t, s, r] = await Promise.all([
+          fetchTasks(),
+          fetchTaskRunStats(),
+          fetchTaskRuns({ limit: 1 }), // 只取最新一条用于「最近执行」
+        ]);
         setTasks(t);
-        setRuns(r.runs);
+        setStats({ total: s.total, success: s.success, failed: s.failed, timeout: s.timeout, running: s.running });
+        setLastRun(r.runs[0] ?? null);
       } catch {
         // ignore
       }
@@ -33,12 +48,9 @@ export function TaskStatusCard({ tasks: tasksProp, taskRuns: runsProp }: Props) 
 
   const totalTasks = tasks.length;
   const enabledTasks = tasks.filter((t) => t.enabled).length;
-  const totalRuns = runs.length;
-  const successRuns = runs.filter((r) => r.status === "success").length;
+  const totalRuns = stats?.total ?? 0;
+  const successRuns = stats?.success ?? 0;
   const successRate = totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : 0;
-
-  // 最近一次执行
-  const lastRun = runs.length > 0 ? runs[0] : null;
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">

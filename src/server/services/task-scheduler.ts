@@ -200,6 +200,9 @@ class TaskScheduler {
       filtered = filtered.filter((r) => new Date(r.startedAt).getTime() >= sinceTs);
     }
 
+    // 按时间倒序排列（最新在前）
+    filtered.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+
     const total = filtered.length;
     const runs = filtered.slice(offset, offset + limit);
     return { runs, total };
