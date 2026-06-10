@@ -9,7 +9,7 @@ import type { ChatMessage, ToolCallInfo } from "../../types";
  *
  * JSONL 消息格式：
  * - assistant: { role: "assistant", content: [{ type: "toolCall", toolCallId, toolName, arguments }, ...] }
- * - toolResult: { role: "toolResult", toolCallId, toolName, content, isError }  ← 独立消息
+ * - toolResult: { role: "toolResult", toolCallId, toolName, content, isError }  ← 独立消息，位置不固定
  *
  * SSE 流式格式：
  * - tool_exec_start → { toolCallId, toolName, args }
@@ -20,10 +20,18 @@ import type { ChatMessage, ToolCallInfo } from "../../types";
 export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
-  // 调试：打印原始消息角色分布
-  const roles = rawMessages.map((m: any) => m.role);
-  const toolResultCount = roles.filter((r: string) => r === "toolResult").length;
-  console.log("[convertToChatMessages] raw messages:", rawMessages.length, "roles:", [...new Set(roles)], "toolResults:", toolResultCount);
+  // 预处理：建立 toolCallId → toolResult 的全局映射
+  // toolResult 消息不一定紧跟在 assistant 消息后面，需要全局查找
+  const toolResultMap: Record<string, { content: any; details: any; isError: boolean }> = {};
+  for (const msg of rawMessages) {
+    if (msg.role === "toolResult" && msg.toolCallId) {
+      toolResultMap[msg.toolCallId] = {
+        content: msg.content || [],
+        details: msg.details,
+        isError: msg.isError || false,
+      };
+    }
+  }
 
   for (let i = 0; i < rawMessages.length; i++) {
     const msg = rawMessages[i];
@@ -53,39 +61,24 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
           .join("") || "";
       const toolCalls = msg.content
         ?.filter((c: any) => c.type === "toolCall")
-        .map((c: any) => ({
-          id: c.toolCallId || "",
-          name: c.toolName || "",
-          args: c.arguments || {},
-          status: "done" as const,
-        }));
+        .map((c: any) => {
+          const toolCallId = c.toolCallId || "";
+          const tc: ToolCallInfo = {
+            id: toolCallId,
+            name: c.toolName || "",
+            args: c.arguments || {},
+            status: "done",
+          };
+          // 从全局映射中恢复 toolResult
+          const result = toolResultMap[toolCallId];
+          if (result) {
+            tc.result = result;
+            tc.isError = result.isError;
+          }
+          return tc;
+        });
 
       if (!textParts && !thinkingParts && (!toolCalls || toolCalls.length === 0)) continue;
-
-      // 从后续的 toolResult 消息中恢复 result 到对应的 toolCall
-      if (toolCalls && toolCalls.length > 0) {
-        // 收集后续连续的 toolResult 消息（它们紧跟在 assistant 消息之后）
-        const toolResults: Record<string, any> = {};
-        let j = i + 1;
-        while (j < rawMessages.length && rawMessages[j]?.role === "toolResult") {
-          const tr = rawMessages[j];
-          toolResults[tr.toolCallId] = {
-            content: tr.content || [],
-            details: tr.details,
-            isError: tr.isError || false,
-          };
-          j++;
-        }
-        console.log("[convertToChatMessages] assistant msg", i, "toolCalls:", toolCalls.length, "found toolResults:", Object.keys(toolResults).length, "toolCallIds:", toolCalls.map((tc: any) => tc.id), "resultIds:", Object.keys(toolResults));
-
-        // 将 result 附加到对应的 toolCall
-        for (const tc of toolCalls) {
-          if (toolResults[tc.id]) {
-            tc.result = toolResults[tc.id];
-            tc.isError = toolResults[tc.id].isError;
-          }
-        }
-      }
 
       messages.push({
         id: `assistant-${messages.length}`,
@@ -96,11 +89,7 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
       });
     }
-    // role === "toolResult" 已在上面的 assistant 循环中处理，跳过
-    else if (msg.role === "toolResult") {
-      // 已在对应的 assistant 消息处理中消费，跳过
-      continue;
-    }
+    // role === "toolResult" 已在预处理中消费，跳过
   }
 
   return messages;
