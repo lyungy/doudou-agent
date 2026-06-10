@@ -184,12 +184,20 @@ export const MessageBubble = memo(function MessageBubble({ message, isStreaming,
             </div>
           )}
 
-          {/* 空消息加载动画 */}
+          {/* 空消息加载动画（思考中 → 紫色，响应中 → 蓝色） */}
           {!message.content && !message.thinking && !message.toolCalls && isStreaming && (
             <div className="flex items-center gap-2 py-1.5">
               <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
               <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
               <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" />
+            </div>
+          )}
+
+          {/* thinking 阶段：紫色光标 + 文字提示 */}
+          {isStreaming && message.thinking && !message.content && !isUser && (
+            <div className="flex items-center gap-2 mt-2">
+              <span className="inline-block w-[3px] h-5 bg-gradient-to-b from-purple-400 to-violet-400 rounded-full animate-pulse" />
+              <span className="text-purple-400 text-xs">思考中...</span>
             </div>
           )}
         </div>

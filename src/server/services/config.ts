@@ -72,6 +72,12 @@ export interface LoggingConfig {
   max_days: number;
 }
 
+/** Agent 配置 */
+export interface AgentConfig {
+  /** Agent 执行超时（秒），0=禁用 */
+  timeout: number;
+}
+
 /** 上下文配置 */
 export interface ContextConfig {
   /** 历史消息截断的 token 预算上限 */
@@ -86,6 +92,7 @@ export interface AppConfig {
   client: ClientConfig;
   logging: LoggingConfig;
   context: ContextConfig;
+  agent: AgentConfig;
 }
 
 // ============ 加载逻辑 ============
@@ -161,6 +168,9 @@ export function loadConfig(path?: string): AppConfig {
     context: {
       max_context_tokens: parsed.context?.max_context_tokens || 50000,
     },
+    agent: {
+      timeout: parsed.agent?.timeout ?? 300,
+    },
   };
 
   currentConfig = config;
@@ -192,6 +202,7 @@ export function saveConfig(config: AppConfig): void {
     storage: config.storage,
     logging: config.logging,
     context: config.context,
+    agent: config.agent,
   };
   writeFileSync(configPath, yaml.dump(data, { lineWidth: 120 }), "utf-8");
   currentConfig = config;

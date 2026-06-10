@@ -202,12 +202,16 @@ export function MessageList() {
         </div>
       </div>
 
-      {/* 回到底部按钮 — fixed 定位，相对于视口，不被任何容器裁剪 */}
+      {/* 回到底部按钮 */}
       {displayMessages.length > 0 && !isAtBottom && (
         <button
           onClick={() => {
             const el = scrollRef.current;
-            if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+            if (!el) return;
+            // 先更新状态，再滚动。isAtBottom=true 启动 RAF 循环接管后续跟随。
+            // 不用 behavior: "smooth"——SSE 持续写入会让 scrollHeight 增长，平滑动画追不上。
+            setIsAtBottom(true);
+            el.scrollTop = el.scrollHeight;
           }}
           className="fixed bottom-24 right-8 z-50 flex items-center gap-1.5 px-3 py-2 bg-white/90 backdrop-blur-sm border border-neutral-200 rounded-full shadow-lg hover:bg-white hover:shadow-xl transition-all cursor-pointer text-neutral-600 text-sm"
         >

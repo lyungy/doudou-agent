@@ -102,36 +102,34 @@ export interface ChatStreamCallbacks {
   onToolEnd: (toolCall: any) => void;
   onToolExecStart: (data: { toolCallId: string; toolName: string; args: any }) => void;
   onToolExecEnd: (data: { toolCallId: string; toolName: string; result: any; isError: boolean }) => void;
-  onLLMStatus: (data: { status: string; requestId: string; ttft?: number; duration?: number; inputTokens?: number; outputTokens?: number; error?: string }) => void;
+  onLLMStatus: (data: { status: string; requestId: string; ttft?: number; duration?: number; inputTokens?: number; outputTokens?: number; error?: string; code?: string }) => void;
   onDone: () => void;
-  onError: (error: string) => void;
+  onError: (error: string, severity?: "recoverable" | "fatal", code?: string) => void;
   onDebugEvent?: (type: string, data: any) => void;
+  /** 重连时 catchup：恢复已累积的内容 */
+  onCatchup?: (data: { text: string; thinking?: string; toolCalls?: Array<{ id: string; name: string; args: any; status: string }> }) => void;
+  /** 重连状态变化 */
+  onReconnecting?: (attempt: number, maxRetries: number) => void;
+  onReconnected?: () => void;
+}
+
+/** SSE 重连配置 */
+const RECONNECT_MAX_RETRIES = 3;
+const RECONNECT_BASE_DELAY_MS = 2000; // 2s 起步，指数退避
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * 发送消息并接收 SSE 流
+ * 消费 SSE 流的通用逻辑
+ * 返回流结束的原因，供调用方决定是否重连
  */
-export async function streamChat(
-  sessionId: string,
-  message: string,
+async function consumeSSEStream(
+  response: Response,
   callbacks: ChatStreamCallbacks,
   signal?: AbortSignal,
-  modelId?: string,
-  thinkingLevel?: ThinkingLevel,
-  images?: Array<{ data: string; mimeType: string }>
-): Promise<void> {
-  const response = await fetch(`${BASE}/chat/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel, images, debug: !!callbacks.onDebugEvent }),
-    signal,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(err.error || "请求失败");
-  }
-
+): Promise<{ completed: boolean; aborted: boolean; interrupted: boolean }> {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -174,18 +172,132 @@ export async function streamChat(
         }
       }
     }
+
+    // 流正常读取完毕（服务端关闭连接）
+    // 如果既没收到 done 也没收到 error，说明连接被提前中断
+    if (!receivedDone && !receivedError) {
+      return { completed: false, aborted: false, interrupted: true };
+    }
+    return { completed: true, aborted: false, interrupted: false };
   } catch (err: any) {
     // 网络中断（如 ERR_CONNECTION_RESET）或流读取异常
-    // 不直接抛出，由调用方根据 receivedDone/receivedError 判断是否需要重连
-    if (signal?.aborted) return; // 用户主动中止，静默退出
-    console.warn("[streamChat] SSE 流读取中断:", err.message);
-    // 既没收到 done 也没收到 error，说明是意外中断 → 通知调用方
-    if (!receivedDone && !receivedError) {
-      callbacks.onError(`连接中断: ${err.message || "网络异常"}`);
+    if (signal?.aborted) {
+      return { completed: false, aborted: true, interrupted: false };
     }
+    console.warn("[consumeSSEStream] SSE 流读取中断:", err.message);
+    return { completed: false, aborted: false, interrupted: true };
   } finally {
-    // 确保 reader 被释放（浏览器兼容性）
     try { reader.releaseLock(); } catch {}
+  }
+}
+
+/**
+ * 尝试重连到正在流式的 Agent
+ * 检测 Agent 状态 → 如果仍在流式则通过 resume 接口继续接收
+ * 返回值：true=重连成功，false=Agent 已结束（无需重连）
+ */
+async function attemptReconnect(
+  sessionId: string,
+  callbacks: ChatStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  // 检测 Agent 是否仍在流式
+  const status = await checkChatStatus(sessionId);
+  if (!status.streaming) return false;
+
+  // Agent 仍在流式，通过 resume 接口重连
+  try {
+    await resumeChat(sessionId, {
+      onCatchup: (data) => {
+        // 恢复已累积的内容到 UI
+        callbacks.onCatchup?.(data);
+      },
+      onTextDelta: callbacks.onTextDelta,
+      onThinkingStart: callbacks.onThinkingStart,
+      onThinkingDelta: callbacks.onThinkingDelta,
+      onThinkingEnd: callbacks.onThinkingEnd,
+      onToolExecStart: callbacks.onToolExecStart,
+      onToolExecEnd: callbacks.onToolExecEnd,
+      onDone: callbacks.onDone,
+      onError: (error) => callbacks.onError(error),
+    }, signal);
+    return true;
+  } catch (err: any) {
+    // resume 返回 404（Agent 在 checkChatStatus 和 resume 之间完成执行）
+    // 这不是真正的错误，而是 Agent 已结束的信号
+    if (err.message?.includes("不在流式状态") || err.message?.includes("404")) {
+      return false;
+    }
+    // 其他错误（网络问题等）向上抛出，由重连循环处理重试
+    throw err;
+  }
+}
+
+/**
+ * 发送消息并接收 SSE 流
+ * 支持自动重连：网络中断时检测 Agent 状态，仍在流式则自动 resume
+ */
+export async function streamChat(
+  sessionId: string,
+  message: string,
+  callbacks: ChatStreamCallbacks,
+  signal?: AbortSignal,
+  modelId?: string,
+  thinkingLevel?: ThinkingLevel,
+  images?: Array<{ data: string; mimeType: string }>
+): Promise<void> {
+  const response = await fetch(`${BASE}/chat/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId, message, modelId, thinkingLevel, images, debug: !!callbacks.onDebugEvent }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(err.error || "请求失败");
+  }
+
+  const result = await consumeSSEStream(response, callbacks, signal);
+
+  // 流正常结束
+  if (result.completed) return;
+
+  // 用户主动中止
+  if (result.aborted) return;
+
+  // 流意外中断，尝试自动重连
+  if (result.interrupted) {
+    for (let attempt = 1; attempt <= RECONNECT_MAX_RETRIES; attempt++) {
+      if (signal?.aborted) return;
+
+      const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      callbacks.onReconnecting?.(attempt, RECONNECT_MAX_RETRIES);
+      console.warn(`[streamChat] SSE 中断，${delay}ms 后尝试重连 (${attempt}/${RECONNECT_MAX_RETRIES})`);
+      await sleep(delay);
+
+      if (signal?.aborted) return;
+
+      try {
+        const reconnected = await attemptReconnect(sessionId, callbacks, signal);
+        if (reconnected) {
+          callbacks.onReconnected?.();
+          return;
+        }
+        // Agent 已不在流式，说明已经执行完成（消息已持久化）
+        console.info("[streamChat] Agent 已结束，重连终止");
+        callbacks.onDone();
+        return;
+      } catch (err: any) {
+        if (signal?.aborted) return;
+        console.warn(`[streamChat] 重连失败 (${attempt}/${RECONNECT_MAX_RETRIES}):`, err.message);
+        // 最后一次重试失败
+        if (attempt === RECONNECT_MAX_RETRIES) {
+          callbacks.onError(`连接中断，重连失败: ${err.message}`, "recoverable", "RECONNECT_FAILED");
+          return;
+        }
+      }
+    }
   }
 }
 
@@ -225,7 +337,7 @@ function handleSSEEvent(type: string, data: any, callbacks: ChatStreamCallbacks)
       callbacks.onDone();
       break;
     case "error":
-      callbacks.onError(data.error);
+      callbacks.onError(data.error, data.severity, data.code);
       break;
     case "llm_status":
       callbacks.onLLMStatus(data);
@@ -274,8 +386,6 @@ export async function resumeChat(
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let receivedDone = false;
-  let receivedError = false;
 
   try {
     while (true) {
@@ -301,17 +411,13 @@ export async function resumeChat(
         try {
           const data = JSON.parse(dataStr);
           handleResumeEvent(eventType, data, callbacks);
-          if (eventType === "done") receivedDone = true;
-          if (eventType === "error") receivedError = true;
         } catch {}
       }
     }
   } catch (err: any) {
     if (signal?.aborted) return;
     console.warn("[resumeChat] SSE 流读取中断:", err.message);
-    if (!receivedDone && !receivedError) {
-      callbacks.onError(`连接中断: ${err.message || "网络异常"}`);
-    }
+    callbacks.onError(`连接中断: ${err.message || "网络异常"}`);
   } finally {
     try { reader.releaseLock(); } catch {}
   }

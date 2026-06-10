@@ -5,13 +5,46 @@
 import { Router } from "express";
 import type { Request, Response } from "express";
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
-import { getModelById } from "../services/config.js";
+import { getModelById, getConfig } from "../services/config.js";
 import { getSession, updateSession, openSession } from "../services/session.js";
 import { getOrCreateAgent, abortAgent, getAgentState, withSessionLock } from "../services/agent.js";
 import { getLLMTracker } from "../services/llm-tracker.js";
 import { getLogger } from "../services/logger.js";
 
 const router = Router();
+
+/** 错误分类：前端根据 severity 决定 UI 行为 */
+function classifyError(err: any): { message: string; severity: "recoverable" | "fatal"; code: string } {
+  const msg = typeof err === "string" ? err : err?.message || "";
+  const lower = msg.toLowerCase();
+
+  // API Key / 认证问题
+  if (lower.includes("api key") || lower.includes("unauthorized") || lower.includes("401") || lower.includes("403")) {
+    return { message: "API Key 无效或已过期，请检查配置", severity: "fatal", code: "AUTH_ERROR" };
+  }
+  // 频率限制
+  if (lower.includes("rate limit") || lower.includes("429") || lower.includes("too many requests")) {
+    return { message: "请求过于频繁，请稍后重试", severity: "recoverable", code: "RATE_LIMIT" };
+  }
+  // 模型不存在
+  if (lower.includes("model") && (lower.includes("not found") || lower.includes("不存在"))) {
+    return { message: "模型不存在，请检查模型配置", severity: "fatal", code: "MODEL_NOT_FOUND" };
+  }
+  // 网络问题
+  if (lower.includes("fetch failed") || lower.includes("econnrefused") || lower.includes("econnreset") || lower.includes("timeout") || lower.includes("etimedout")) {
+    return { message: "网络连接失败，请检查网络或 API 地址", severity: "recoverable", code: "NETWORK_ERROR" };
+  }
+  // LLM 服务端错误（精确匹配 HTTP 5xx 状态码，避免误匹配数字）
+  if (/\b5\d{2}\b/.test(lower) && (lower.includes("status") || lower.includes("http") || lower.includes("server") || lower.includes("error"))) {
+    return { message: "模型服务暂时不可用，请稍后重试", severity: "recoverable", code: "SERVER_ERROR" };
+  }
+  // 上下文超长
+  if (lower.includes("context length") || (lower.includes("token") && lower.includes("exceed"))) {
+    return { message: "对话上下文过长，请开新会话或减少消息", severity: "fatal", code: "CONTEXT_TOO_LONG" };
+  }
+
+  return { message: "服务异常，请重试", severity: "fatal", code: "UNKNOWN" };
+}
 
 /**
  * POST /api/chat/stream — SSE 流式对话
@@ -104,6 +137,10 @@ router.post("/stream", async (req: Request, res: Response) => {
     }
   });
 
+  // 从配置读取 Agent 超时（默认 300 秒）
+  const agentTimeoutMs = (getConfig().agent?.timeout || 300) * 1000;
+  let timedOut = false;
+
   try {
     await withSessionLock(sessionId, async () => {
       const model = getModelById(modelId || sessionMeta.modelId || undefined);
@@ -159,9 +196,10 @@ router.post("/stream", async (req: Request, res: Response) => {
         if (event.type === "message_end") {
           const msg = (event as any).message;
 
-          // 错误消息 → 推 error 事件
+          // 错误消息 → 推 error 事件（带 severity）
           if (msg?.stopReason === "error" && msg?.errorMessage) {
-            sendEvent("error", { error: msg.errorMessage });
+            const classified = classifyError(msg.errorMessage);
+            sendEvent("error", { error: classified.message, severity: classified.severity, code: classified.code });
             return;
           }
 
@@ -217,16 +255,35 @@ router.post("/stream", async (req: Request, res: Response) => {
             }))
         : undefined;
 
-      await agent.prompt(message, imageContents?.length ? imageContents : undefined);
-
-      try {
+      // Agent 执行：prompt + waitForIdle，带超时保护
+      const agentExecution = async () => {
+        await agent.prompt(message, imageContents?.length ? imageContents : undefined);
         await agent.waitForIdle();
-      } catch (waitErr: any) {
-        // waitForIdle 异常（如 LLM 调用失败、工具执行超时）时兜底通知前端
-        logger.warn("sse", `waitForIdle 异常: ${waitErr.message}`, { sessionId });
-        if (!aborted) {
-          sendEvent("error", { error: waitErr.message || "Agent 执行异常" });
+      };
+
+      if (agentTimeoutMs > 0) {
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            timedOut = true;
+            reject(new Error(`Agent 执行超时（${agentTimeoutMs / 1000}秒），已自动中止`));
+          }, agentTimeoutMs);
+        });
+        try {
+          await Promise.race([agentExecution(), timeoutPromise]);
+        } catch (raceErr: any) {
+          if (timedOut) {
+            logger.warn("sse", `Agent 执行超时，自动 abort`, { sessionId, timeout: agentTimeoutMs });
+            agent.abort();
+          }
+          throw raceErr;
+        } finally {
+          // 清理定时器，防止内存泄漏
+          if (timeoutId) clearTimeout(timeoutId);
         }
+      } else {
+        // 禁用超时
+        await agentExecution();
       }
 
       // 兜底：确保所有新增 Agent 消息都已持久化（跳过历史消息和已写的）
@@ -263,20 +320,26 @@ router.post("/stream", async (req: Request, res: Response) => {
           inputTokens: record?.inputTokens,
           outputTokens: record?.outputTokens,
         });
-
-        sendEvent("done", { reason: "stop" });
       }
 
       updateSession(sessionId, { messageCount: agent.state.messages.length, modelId: modelId || undefined });
       unsubscribe();
     });
   } catch (err: any) {
-    logger.error("sse", "对话处理异常", { sessionId, error: err.message });
+    logger.error("sse", "对话处理异常", { sessionId, error: err.message, timedOut });
     tracker.onError(requestId, err.message);
-    sendEvent("llm_status", { status: "error", requestId, error: err.message });
-    if (!aborted) sendEvent("error", { error: err.message });
+    const classified = classifyError(err);
+    sendEvent("llm_status", { status: "error", requestId, error: classified.message, code: classified.code });
+    if (!aborted) {
+      sendEvent("error", { error: classified.message, severity: classified.severity, code: classified.code });
+    }
   } finally {
     clearInterval(heartbeat);
+
+    // 保证 always 发送 done 事件，确保前端状态正确清理
+    if (!aborted && !res.writableEnded) {
+      sendEvent("done", { reason: timedOut ? "timeout" : "stop" });
+    }
 
     // SSE 连接关闭日志
     if (!connectionClosed) {
@@ -386,19 +449,42 @@ router.get("/resume/:sessionId", async (req: Request, res: Response) => {
     }
   });
 
-  // 等待 Agent 执行完成
+  // 等待 Agent 执行完成（带超时保护）
+  const agentTimeoutMs = (getConfig().agent?.timeout || 300) * 1000;
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    await agent.waitForIdle();
+    const waitPromise = agent.waitForIdle();
+    if (agentTimeoutMs > 0) {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          reject(new Error(`Agent 执行超时（${agentTimeoutMs / 1000}秒），已自动中止`));
+        }, agentTimeoutMs);
+      });
+      await Promise.race([waitPromise, timeoutPromise]);
+    } else {
+      await waitPromise;
+    }
   } catch (err: any) {
-    // waitForIdle 异常时也要通知前端，避免前端永远挂起
-    logger.warn("sse", `Resume waitForIdle 异常: ${err.message}`, { sessionId });
-    if (!closed) sendEvent("error", { error: err.message || "Agent 执行异常" });
+    // waitForIdle 异常或超时时也要通知前端，避免前端永远挂起
+    if (timedOut) {
+      logger.warn("sse", `Resume Agent 执行超时，自动 abort`, { sessionId });
+      agent.abort();
+    }
+    const classified = classifyError(err);
+    logger.warn("sse", `Resume waitForIdle 异常: ${classified.message}`, { sessionId });
+    if (!closed) sendEvent("error", { error: classified.message, severity: classified.severity, code: classified.code });
+  } finally {
+    // 清理定时器，防止内存泄漏
+    if (timeoutId) clearTimeout(timeoutId);
   }
 
   unsubscribe();
   clearInterval(heartbeat);
+  // 保证 always 发送 done 事件
   if (!closed && !res.writableEnded) {
-    sendEvent("done", { reason: "stop" });
+    sendEvent("done", { reason: timedOut ? "timeout" : "stop" });
     res.end();
   }
 });

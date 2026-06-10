@@ -109,13 +109,23 @@ function PageLoader() {
 
 /** 顶栏 */
 function TopBar() {
-  const { currentView } = useAppStore();
+  const { currentView, isStreaming, reconnecting } = useAppStore();
+
+  // 流式状态指示
+  const streamDot = isStreaming
+    ? reconnecting > 0
+      ? { color: "bg-amber-400 animate-pulse", title: "重连中" }
+      : { color: "bg-green-400 animate-pulse", title: "推理中" }
+    : null;
 
   return (
     <div className="flex items-center justify-between px-8 py-4 bg-white/80 backdrop-blur-sm border-b border-neutral-200/60">
       <div className="flex items-center gap-3">
         <span className="text-lg">🐕</span>
         <span className="font-semibold text-neutral-800 text-[15px]">Doudou Agent</span>
+        {streamDot && (
+          <span className={`w-2 h-2 rounded-full ${streamDot.color}`} title={streamDot.title} />
+        )}
       </div>
       <div className="flex items-center gap-3">
         {currentView === "chat" && <ModelSelector />}

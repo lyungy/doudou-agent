@@ -64,6 +64,7 @@ router.put("/", (req, res) => {
       client: { ...current.client, ...(updates as any).client },
       logging: { ...current.logging, ...(updates as any).logging },
       context: { ...current.context, ...(updates as any).context },
+      agent: { ...current.agent, ...(updates as any).agent },
     };
 
     saveConfig(newConfig);

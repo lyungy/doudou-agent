@@ -105,6 +105,8 @@ export function InputBox() {
   const toggleDebug = useAppStore((s) => s.toggleDebug);
   const debugPanelOpen = useAppStore((s) => s.debugPanelOpen);
   const toggleDebugPanel = useAppStore((s) => s.toggleDebugPanel);
+  const reconnecting = useAppStore((s) => s.reconnecting);
+  const reconnectMaxRetries = useAppStore((s) => s.reconnectMaxRetries);
 
   const currentModel = models.find((m) => m.id === currentModelId);
   const supportsImages = currentModel?.input?.includes("image") ?? false;
@@ -406,6 +408,17 @@ export function InputBox() {
   return (
     <div className="px-6 pb-6 pt-3">
       <div className="max-w-5xl mx-auto relative">
+        {/* 重连状态指示器 */}
+        {reconnecting > 0 && (
+          <div className="mb-2 flex items-center justify-center gap-2 py-2 px-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-700">
+            <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <span>连接中断，正在重连 ({reconnecting}/{reconnectMaxRetries})...</span>
+          </div>
+        )}
+
         {/* / 命令浮层 */}
         {showSlashMenu && filteredCommands.length > 0 && (
           <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-xl shadow-xl border border-neutral-200 py-2 max-h-64 overflow-y-auto z-50">

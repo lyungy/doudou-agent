@@ -22,6 +22,9 @@ export interface ChatState {
   debugEnabled: boolean;
   debugEntries: DebugEntry[];
   debugPanelOpen: boolean;
+  // SSE 重连状态（0 = 未重连，>0 = 当前重连次数）
+  reconnecting: number;
+  reconnectMaxRetries: number;
 }
 
 export interface ChatActions {
@@ -49,6 +52,7 @@ export interface ChatActions {
   _addToolCall: (tc: ToolCallInfo) => void;
   _updateToolCall: (id: string, updates: Partial<ToolCallInfo>) => void;
   _commitAssistantMessage: () => void;
+  _setReconnecting: (attempt: number, maxRetries: number) => void;
 }
 
 export type ChatSlice = ChatState & ChatActions;
@@ -73,6 +77,9 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
   debugEnabled: false,
   debugEntries: [],
   debugPanelOpen: false,
+  // 重连
+  reconnecting: 0,
+  reconnectMaxRetries: 0,
 
   getCurrentLLMStatus: () => {
     const { currentSessionId, llmStatusBySession } = get();
@@ -127,11 +134,6 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
     if (!currentSessionId || (!content.trim() && (!images || images.length === 0))) return;
 
     let sessionId = currentSessionId;
-    if (!sessionId) {
-      const title = content.trim() ? content.slice(0, 30) : "图片对话";
-      const session = await get().createSession(title);
-      sessionId = session.id;
-    }
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -156,6 +158,7 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
       currentText: "",
       currentThinking: "",
       currentToolCalls: [],
+      reconnecting: 0,
       llmStatusBySession: {
         ...state.llmStatusBySession,
         [sessionId]: { status: "connecting" } as LLMStatusData,
@@ -198,25 +201,68 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
         onDebugEvent: get().debugEnabled
           ? (type, data) => get().addDebugEntry({ type: type.replace("debug_", "") as any, data })
           : undefined,
+        // 重连 catchup：恢复已累积的内容到 UI
+        onCatchup: (data) => {
+          const catchupToolCalls: ToolCallInfo[] | undefined = data.toolCalls?.map((tc: any) => ({
+            id: tc.id,
+            name: tc.name,
+            args: tc.args,
+            status: (tc.status as ToolCallInfo["status"]) || "done",
+          }));
+          set((state: ChatState) => {
+            const messages = [...state.messages];
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg && lastMsg.type === "assistant") {
+              messages[messages.length - 1] = {
+                ...lastMsg,
+                content: data.text,
+                thinking: data.thinking || undefined,
+                toolCalls: catchupToolCalls,
+              };
+            }
+            return {
+              messages,
+              currentText: data.text,
+              currentThinking: data.thinking || "",
+              currentToolCalls: catchupToolCalls || [],
+            };
+          });
+        },
         onDone: () => {
           get()._commitAssistantMessage();
-          set({ isStreaming: false, streamingMessageId: null });
+          set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
         },
-        onError: (error) => {
+        onError: (error, severity) => {
+          // 错误改为 Toast 通知，不嵌入对话流
+          if (severity === "recoverable") {
+            get().addToast?.("warning", error, 5000);
+          } else {
+            get().addToast?.("error", error, 6000);
+          }
+          // 空消息时仍显示简要提示，但不作为 AI 回复
           if (!get().currentText) {
-            set({ currentText: `⚠️ 请求失败：${error || "未知错误"}` });
+            set({ currentText: "" });
           }
           get()._commitAssistantMessage();
-          set({ isStreaming: false, streamingMessageId: null });
+          set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
+        },
+        onReconnecting: (attempt, maxRetries) => {
+          set({ reconnecting: attempt, reconnectMaxRetries: maxRetries });
+          // 首次重连时弹 Toast
+          if (attempt === 1) {
+            get().addToast?.("warning", "连接中断，正在尝试重连...", 8000);
+          }
+        },
+        onReconnected: () => {
+          set({ reconnecting: 0 });
+          get().addToast?.("success", "已重新连接", 3000);
         },
       }, abortController.signal, modelId || undefined, thinkingLevel, images);
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        if (!get().currentText) {
-          set({ currentText: `⚠️ 请求失败：${err.message || "未知错误"}` });
-        }
+        get().addToast?.("error", `请求失败：${err.message || "未知错误"}`, 6000);
         get()._commitAssistantMessage();
-        set({ isStreaming: false, streamingMessageId: null });
+        set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
       }
     }
   },
@@ -239,12 +285,26 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
 
   /** 编辑用户消息并重新发送 */
   editAndResend: async (messageId: string, newContent: string) => {
-    const { messages, isStreaming } = get();
-    if (isStreaming) return;
+    const { messages, isStreaming, currentSessionId } = get();
+    if (isStreaming) {
+      get().addToast?.("warning", "当前正在对话中，请稍后再试", 3000);
+      return;
+    }
+    if (!currentSessionId) {
+      get().addToast?.("error", "未选择会话", 3000);
+      return;
+    }
+    if (!newContent.trim()) {
+      get().addToast?.("warning", "消息内容不能为空", 3000);
+      return;
+    }
 
     // 找到该用户消息的位置
     const idx = messages.findIndex((m: ChatMessage) => m.id === messageId);
-    if (idx === -1) return;
+    if (idx === -1) {
+      get().addToast?.("error", "未找到原消息", 3000);
+      return;
+    }
 
     // 截断：保留该消息之前的内容 + 更新该消息内容
     const trimmed = messages.slice(0, idx);
@@ -260,12 +320,14 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
     // 1. 中止前端 SSE 连接
     abortController?.abort();
     abortController = null;
-    set({ isStreaming: false, streamingMessageId: null });
+    set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
     // 2. 调后端接口停止 Agent 执行
     if (sessionId) {
       api.abortChat(sessionId).catch(() => {});
     }
   },
+
+  _setReconnecting: (attempt, maxRetries) => set({ reconnecting: attempt, reconnectMaxRetries: maxRetries }),
 
   _resumeStream: async (sessionId: string) => {
     const assistantId = `resume-${Date.now()}`;
@@ -276,6 +338,7 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
       currentText: "",
       currentThinking: "",
       currentToolCalls: [],
+      reconnecting: 0,
       llmStatusBySession: {
         ...state.llmStatusBySession,
         [sessionId]: { status: "streaming" } as LLMStatusData,
@@ -333,23 +396,19 @@ export const createChatSlice = (set: any, get: any): ChatSlice => ({
         },
         onDone: () => {
           get()._commitAssistantMessage();
-          set({ isStreaming: false, streamingMessageId: null });
+          set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
         },
         onError: (error) => {
-          if (!get().currentText) {
-            set({ currentText: `⚠️ 请求失败：${error || "未知错误"}` });
-          }
+          get().addToast?.("error", `请求失败：${error || "未知错误"}`, 6000);
           get()._commitAssistantMessage();
-          set({ isStreaming: false, streamingMessageId: null });
+          set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
         },
       }, abortController.signal);
     } catch (err: any) {
       if (err.name !== "AbortError") {
-        if (!get().currentText) {
-          set({ currentText: `⚠️ 请求失败：${err.message || "未知错误"}` });
-        }
+        get().addToast?.("error", `请求失败：${err.message || "未知错误"}`, 6000);
         get()._commitAssistantMessage();
-        set({ isStreaming: false, streamingMessageId: null });
+        set({ isStreaming: false, streamingMessageId: null, reconnecting: 0 });
       }
     }
   },
