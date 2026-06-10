@@ -421,9 +421,10 @@ router.get("/resume/:sessionId", async (req: Request, res: Response) => {
     const toolCalls = content
       .filter((c: any) => c.type === "toolCall")
       .map((c: any) => ({
-        id: c.toolCallId || "",
-        name: c.toolName || "",
-        args: c.arguments || {},
+        // JSONL 用 id/name，SSE 用 toolCallId/toolName，兼容两者
+        id: c.id || c.toolCallId || "",
+        name: c.name || c.toolName || "",
+        args: c.arguments || c.args || {},
         status: "done" as const,
       }));
 
