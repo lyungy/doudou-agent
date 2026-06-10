@@ -7,36 +7,26 @@ import type { ChatMessage, ToolCallInfo } from "../../types";
 /**
  * 将 pi-agent-core 的消息格式转换为前端 ChatMessage
  *
- * 匹配策略（优先级从高到低）：
- * 1. toolCallId 精确匹配
- * 2. toolName 匹配（JSONL 中 toolCall 的 toolCallId 可能为空）
- * 3. 位置兜底（按 toolName 出现顺序匹配）
+ * JSONL 字段名 vs SSE 字段名：
+ * - toolCall:  JSONL 用 `id` / `name` / `arguments`，SSE 用 `toolCallId` / `toolName` / `args`
+ * - toolResult: 统一用 `toolCallId` / `toolName` / `content`
  */
 export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
-  // 预处理：收集所有 toolResult 消息，按 toolCallId 和 toolName 建立索引
-  const toolResultById: Record<string, any> = {};
-  const toolResultsByName: Record<string, any[]> = {}; // 同名可能有多个，用数组
+  // 预处理：建立 toolCallId → toolResult 的全局映射
+  const toolResultMap: Record<string, { content: any; details: any; isError: boolean }> = {};
   for (const msg of rawMessages) {
     if (msg.role === "toolResult" && msg.toolCallId) {
-      const entry = {
+      toolResultMap[msg.toolCallId] = {
         content: msg.content || [],
         details: msg.details,
         isError: msg.isError || false,
       };
-      toolResultById[msg.toolCallId] = entry;
-      if (!toolResultsByName[msg.toolName]) toolResultsByName[msg.toolName] = [];
-      toolResultsByName[msg.toolName].push(entry);
     }
   }
 
-  // 按 toolName 的消费顺序跟踪（每消费一个 toolResult 就移位）
-  const nameConsumed: Record<string, number> = {};
-
-  for (let i = 0; i < rawMessages.length; i++) {
-    const msg = rawMessages[i];
-
+  for (const msg of rawMessages) {
     if (msg.role === "user") {
       const content =
         typeof msg.content === "string"
@@ -63,27 +53,15 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
       const toolCalls = msg.content
         ?.filter((c: any) => c.type === "toolCall")
         .map((c: any) => {
-          const toolCallId = c.toolCallId || "";
-          const toolName = c.toolName || "";
+          // JSONL 用 id/name，SSE 用 toolCallId/toolName，兼容两者
+          const toolCallId = c.id || c.toolCallId || "";
+          const result = toolResultMap[toolCallId];
           const tc: ToolCallInfo = {
             id: toolCallId,
-            name: toolName,
-            args: c.arguments || {},
+            name: c.name || c.toolName || "",
+            args: c.arguments || c.args || {},
             status: "done",
           };
-
-          // 策略 1：toolCallId 精确匹配
-          let result = toolCallId ? toolResultById[toolCallId] : undefined;
-
-          // 策略 2+3：按 toolName 匹配（处理 JSONL 中 toolCallId 为空的情况）
-          if (!result && toolName && toolResultsByName[toolName]) {
-            const idx = nameConsumed[toolName] || 0;
-            if (idx < toolResultsByName[toolName].length) {
-              result = toolResultsByName[toolName][idx];
-              nameConsumed[toolName] = idx + 1;
-            }
-          }
-
           if (result) {
             tc.result = result;
             tc.isError = result.isError;
@@ -102,6 +80,7 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
         timestamp: typeof msg.timestamp === "number" ? msg.timestamp : Date.now(),
       });
     }
+    // role === "toolResult" 已在预处理中消费，跳过
   }
 
   return messages;

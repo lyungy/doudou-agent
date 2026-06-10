@@ -172,10 +172,18 @@ router.get("/:id/messages", async (req, res) => {
     }
 
     const context = await session.buildContext();
-    // 调试：打印消息角色分布
-    const roles = context.messages.map((m: any) => m.role);
-    const toolResultCount = roles.filter((r: string) => r === "toolResult").length;
-    console.log("[session/messages] total:", context.messages.length, "roles:", [...new Set(roles)], "toolResults:", toolResultCount);
+    // 调试：打印前 5 条消息的完整结构
+    for (let i = 0; i < Math.min(context.messages.length, 5); i++) {
+      const m = context.messages[i];
+      if (m.role === "assistant") {
+        const toolCalls = m.content?.filter((c: any) => c.type === "toolCall");
+        if (toolCalls?.length) {
+          console.log(`[DEBUG] msg[${i}] assistant toolCalls:`, JSON.stringify(toolCalls, null, 2));
+        }
+      } else if (m.role === "toolResult") {
+        console.log(`[DEBUG] msg[${i}] toolResult:`, JSON.stringify(m, null, 2));
+      }
+    }
     res.json(context.messages);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
