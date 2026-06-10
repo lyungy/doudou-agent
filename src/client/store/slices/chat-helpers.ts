@@ -20,6 +20,11 @@ import type { ChatMessage, ToolCallInfo } from "../../types";
 export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
   const messages: ChatMessage[] = [];
 
+  // 调试：打印原始消息角色分布
+  const roles = rawMessages.map((m: any) => m.role);
+  const toolResultCount = roles.filter((r: string) => r === "toolResult").length;
+  console.log("[convertToChatMessages] raw messages:", rawMessages.length, "roles:", [...new Set(roles)], "toolResults:", toolResultCount);
+
   for (let i = 0; i < rawMessages.length; i++) {
     const msg = rawMessages[i];
 
@@ -71,6 +76,7 @@ export function convertToChatMessages(rawMessages: any[]): ChatMessage[] {
           };
           j++;
         }
+        console.log("[convertToChatMessages] assistant msg", i, "toolCalls:", toolCalls.length, "found toolResults:", Object.keys(toolResults).length, "toolCallIds:", toolCalls.map((tc: any) => tc.id), "resultIds:", Object.keys(toolResults));
 
         // 将 result 附加到对应的 toolCall
         for (const tc of toolCalls) {

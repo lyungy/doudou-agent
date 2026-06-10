@@ -172,6 +172,10 @@ router.get("/:id/messages", async (req, res) => {
     }
 
     const context = await session.buildContext();
+    // 调试：打印消息角色分布
+    const roles = context.messages.map((m: any) => m.role);
+    const toolResultCount = roles.filter((r: string) => r === "toolResult").length;
+    console.log("[session/messages] total:", context.messages.length, "roles:", [...new Set(roles)], "toolResults:", toolResultCount);
     res.json(context.messages);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
